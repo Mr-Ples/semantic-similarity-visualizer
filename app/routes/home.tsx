@@ -12,7 +12,7 @@ import { useLocalStorageValue, useMountEffect } from "@react-hookz/web"
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "Polarized Words" },
+    { title: "Semantic Similarity Visualizer" },
     {
       name: "description",
       content: "Visualize word embeddings on a good-evil axis",
@@ -274,7 +274,7 @@ function UI({ loaderData }: Route.ComponentProps) {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <h1 className="text-xl font-semibold text-gray-900">
-                Polarized Words
+                Semantic Similarity Visualizer
               </h1>
             </div>
             <div className="flex gap-2">
