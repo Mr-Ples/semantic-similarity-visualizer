@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polarized Words</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 16px;
+        }
+        
+        .input-container {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        #wordInput {
+            padding: 12px;
+            font-size: 16px;
+            flex: 1;
+            min-width: 200px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        
+        #addButton {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            background: #4A4A4A;
+            color: white;
+            border-radius: 4px;
+        }
+        #clearButton {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #ffffff;
+            color: black;
+            border-radius: 4px;
+        }
+        
+        .axis-container {
+            position: relative;
+            min-height: 200px;
+            max-height: 400px;
+            padding: 60px 20px 20px;
+            border-bottom: 2px solid #ccc;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        
+        .word-box {
+            position: absolute;
+            padding: 8px 16px;
+            border-radius: 4px;
+            background: #f0f0f0;
+            transform: translateX(-50%);
+            bottom: 20px;
+            font-size: 14px;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1;
+            max-height: 20px;
+        }
+        
+        #evil-box {
+            left: 0;
+            top:5px;
+            background: #ff9999;            
+        }
+        
+        #good-box {
+            right: 0;
+            top:5px;
+            transform: translateX(50%);
+            background: #99ff99;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+            
+            .input-container {
+                flex-direction: column;
+            }
+            
+            #wordInput {
+                width: 100%;
+                min-width: unset;
+            }
+            
+            #addButton {
+                width: 100%;
+            }
+            
+            .word-box {
+                padding: 6px 12px;
+                font-size: 13px;
+                max-height: 50px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>
+        Polarized Words
+    </h1>
+    <p>
+        Enter 2 or more words to see their <span style="text-decoration: underline; font-weight: 700;">relative</span> distances to the concepts of "good" and "evil". This is based on language model embeddings which capture the semantics associated with the words in humanity's collective consciousness. 
+    </p>
+    <p>
+        Source code / about this project: <a href="https://github.com/DefenderOfBasic/good-and-evil-concepts">github.com/DefenderOfBasic/good-and-evil-concepts</a>
+    </p>
+    <div id="status"></div>
+    <div id="content-container" style="display: none;">
+        <div class="input-container">
+            <input type="text" id="wordInput" placeholder="Enter a word">
+            <button id="addButton">Add Word</button>
+            <button id="clearButton">Clear all</button>
+        </div>
+        
+        <div class="axis-container" id="axis">
+            <div class="word-box" id="evil-box">Evil</div>
+            <div class="word-box" id="good-box">Good</div>
+        </div>
+    </div>
+    <h2>⚙️ Settings</h2>
+    <label>North pole</label>
+    <input id="north-pole" value="good"></input>
+
+    <label>South pole</label>
+    <input id="south-pole" value="evil"></input>
+    <br/><br/>
+    <label>
+        Embedding model:
+    </label>
+    <input id="model" value="nomic-ai/nomic-embed-text-v1.5" style="width: 400px;"></input>
+    <br/>
+    <label>
+        OpenAI key:
+    </label>
+    <input id="openai-key" value="" style="width: 400px;"></input>
+    <br/>
+    <label>
+        Voyage API key:
+    </label>
+    <input id="voyage-key" value="" style="width: 400px;"></input>
+    <br/>
+    <label>
+        Google API key:
+    </label>
+    <input id="google-key" value="" style="width: 400px;"></input>
+    <br/>
+    
+
+    <p style="color:gray">
+        (from <a style="color: gray;" href="https://huggingface.co/models?other=feature-extraction">Hugging Face</a>, must support ONNX. Refresh page to reload model)
+    </p>
+    <button id="reset">
+        Reset settings
+    </button>
+
+    <script type="module">
+        const modelInput = document.querySelector("#model")
+        const openaiKey = document.querySelector("#openai-key")
+        const voyageAIKey = document.querySelector("#voyage-key")
+        const googleKey = document.querySelector("#google-key")
+        const northPoleInput = document.querySelector("#north-pole")
+        const southPoleInput = document.querySelector("#south-pole")
+        modelInput.oninput = () => {
+            localStorage.setItem("model", modelInput.value)
+        }
+        openaiKey.oninput = () => {
+            localStorage.setItem("openai-key", openaiKey.value)
+        }
+        voyageAIKey.oninput = () => {
+            localStorage.setItem("voyage-key", voyageAIKey.value)
+        }
+        googleKey.oninput = () => {
+            localStorage.setItem("google-key", googleKey.value)
+        }
+
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.2';
+        // Since we will download the model from the Hugging Face Hub, we can skip the local model check
+        env.allowLocalModels = false;
+        // Reference the elements that we will need
+        const status = document.getElementById('status');
+        // Create a new object detection pipeline
+        status.textContent = 'Loading model...';
+        if (localStorage.getItem('words') == null) {
+            localStorage.setItem('words', JSON.stringify([]))
+        }
+        if (localStorage.getItem('model')) {
+            modelInput.value = localStorage.getItem('model')
+        }
+        if (localStorage.getItem('north')) northPoleInput.value = localStorage.getItem('north')
+        if (localStorage.getItem('south')) southPoleInput.value = localStorage.getItem('south')
+        if (localStorage.getItem('openai-key')) openaiKey.value = localStorage.getItem('openai-key')
+        if (localStorage.getItem('voyage-key')) voyageAIKey.value = localStorage.getItem('voyage-key')
+        if (localStorage.getItem('google-key')) googleKey.value = localStorage.getItem('google-key')
+
+        const model_name = modelInput.value
+        
+        let embedder = null 
+        if (openaiKey.value == "" && googleKey.value == "") {
+            embedder = await pipeline('feature-extraction', model_name,
+            {
+                quantized: true,
+                progress_callback: data => {
+                    const { progress, loaded, total } = data
+                    if (progress) {
+                        const totalMB = Math.round(total / (1024 * 1024))
+                        const loadedMB = Math.round(loaded / (1024 * 1024))
+                        
+                        status.textContent = `${Math.round(progress)}% (${loadedMB}/${totalMB} mb)`;
+                    }
+                }
+            });
+        }
+        
+        let southPole = southPoleInput.value
+        let northPole = northPoleInput.value
+        document.querySelector("#evil-box").innerHTML = southPole
+        document.querySelector("#good-box").innerHTML = northPole
+        status.textContent = 'Embedding poles';
+
+        async function embedWord(word) {
+            const openaiKey = document.querySelector("#openai-key").value 
+            const voyageKey = document.querySelector("#voyage-key").value 
+            const googleKey = document.querySelector("#google-key").value 
+            
+            if (openaiKey == "" && voyageKey == "" && googleKey == "") {
+                return (await embedder(word, {pooling: 'mean', normalize: true})).data
+            }
+
+            if (googleKey != "") {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${googleKey}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        'content': {
+                            'parts': [{
+                                'text': word
+                            }]
+                        },
+                        'task_type': 'SEMANTIC_SIMILARITY'
+                    })
+                });
+
+                const data = await response.json();
+                return data.embedding.values;
+            }
+
+            if (voyageKey != "") {
+                const response = await fetch('https://api.voyageai.com/v1/embeddings', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + voyageKey,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        'input': word,
+                        'model': 'voyage-3-large',
+                        'input_type': 'document'
+                    })
+                });
+
+                const data = await response.json();
+                console.log(data)
+                return data.data[0].embedding;
+            }
+
+            if (openaiKey != "") {
+                const response = await fetch('https://api.openai.com/v1/embeddings', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + openaiKey,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        'input': word,
+                        'model': 'text-embedding-3-large',
+                        'encoding_format': 'float'
+                    })
+                });
+
+                const data = await response.json();
+                return data.data[0].embedding;
+            }
+        }
+
+        let southVector = await embedWord(southPole)
+        let northVector = await embedWord(northPole)
+
+        northPoleInput.onchange = () => {
+            updatePoles()
+        }
+        southPoleInput.onchange = () => {
+            updatePoles()
+        }
+        async function updatePoles() {
+            southPole = southPoleInput.value
+            northPole = northPoleInput.value
+            document.querySelector("#evil-box").innerHTML = southPole
+            document.querySelector("#good-box").innerHTML = northPole
+
+            localStorage.setItem("north", northPoleInput.value) 
+            localStorage.setItem("south", southPoleInput.value) 
+            southVector = await embedWord(southPole)
+            northVector = await embedWord(northPole)
+
+            reComputeAllWords()
+        }
+
+        status.textContent = 'Ready';
+        status.style.display = 'none'
+        document.querySelector("#content-container").style.display = 'block'
+
+        const wordInput = document.getElementById('wordInput');
+        const addButton = document.getElementById('addButton');
+        const axis = document.getElementById('axis');
+
+        let wordsComputed = []
+
+        async function reComputeAllWords() {
+            clearAllWords()
+            const oldWords = wordsComputed.map(item => item.word)
+            wordsComputed = []
+            for (let oldWord of oldWords) {
+                await addWord(oldWord)
+            }
+        }
+        
+        async function addWord(overrideWord = null) {
+            let word = wordInput.value.trim();
+            if (overrideWord) word = overrideWord
+
+            if (word) {
+                wordInput.value = '';
+                wordInput.focus();
+
+                const embeddingVector = await embedWord(word)
+                const southDistance = cosineSimilarity(embeddingVector, southVector)
+                const northDistance = cosineSimilarity(embeddingVector, northVector)
+                wordsComputed.push({ word, southDistance, northDistance })
+
+                localStorage.setItem('words', 
+                    JSON.stringify(wordsComputed.map(item => item.word)) 
+                )
+            }
+            // Add all words
+            clearAllWords()
+
+            const positions = wordsComputed.map(d => d.northDistance / (d.southDistance + d.northDistance));
+            const minPos = Math.min(...positions);
+            const maxPos = Math.max(...positions);
+
+            const wordElements = [];
+            for (let { word, southDistance, northDistance } of wordsComputed) {
+                const rawPosition = (northDistance / (southDistance + northDistance))
+                const normalizedPosition = ((rawPosition - minPos) / (maxPos - minPos) * 100);                    
+
+                const wordElement = document.createElement('div');
+                wordElement.className = 'word-box';
+                wordElement.textContent = word;
+                wordElement.style.left = `${normalizedPosition}%`;
+                axis.appendChild(wordElement);
+                wordElements.push(wordElement);
+                wordElement.onclick = (e) => {
+                    wordsComputed = wordsComputed.filter(item => item.word !== e.target.textContent);
+                    e.target.parentNode.removeChild(e.target);
+                    addWord()
+                }
+            }
+            
+            // Adjust vertical positions to prevent overlapping
+            for (let i = 0; i < wordElements.length; i++) {
+                const currentElement = wordElements[i];
+                const currentLeft = parseFloat(currentElement.style.left);
+                let verticalOffset = 0;
+                
+                // Check for overlaps with previous elements
+                for (let j = 0; j < i; j++) {
+                    const prevElement = wordElements[j];
+                    const prevLeft = parseFloat(prevElement.style.left);
+                    const distance = Math.abs(currentLeft - prevLeft);
+                    
+                    // If words are within 15% of each other, stack them vertically
+                    if (distance < 15) {
+                        const prevOffset = parseInt(prevElement.style.bottom) || 20;
+                        verticalOffset = Math.max(verticalOffset, prevOffset + 50);
+                    }
+                }
+                
+                if (verticalOffset > 0) {
+                    currentElement.style.bottom = `${verticalOffset}px`;
+                }
+            }
+            
+            // Adjust container height if needed
+            const maxBottom = Math.max(...wordElements.map(el => parseInt(el.style.bottom) || 20));
+            if (maxBottom > 150) {
+                axis.style.minHeight = `${maxBottom + 50}px`;
+            }    
+            
+        }
+
+
+        function clearAllWords() {
+            axis.replaceChildren(document.getElementById('evil-box'), document.getElementById('good-box'));
+        }
+
+        document.querySelector("#clearButton").onclick = () => {
+            clearAllWords()
+            wordsComputed = []
+        }
+        
+        addButton.addEventListener('click', () => {
+            addWord()
+        });
+        wordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addWord();
+            }
+        });
+
+        /// Helpers
+        document.querySelector("#reset").onclick = () => {
+            modelInput.value = "nomic-ai/nomic-embed-text-v1.5"
+            northPoleInput.value = "good"
+            southPoleInput.value = "evil"
+
+            modelInput.dispatchEvent(new Event('input', { bubbles: true }));
+            northPoleInput.dispatchEvent(new Event('change', { bubbles: true }));
+            southPoleInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        // Calculate dot product of two vectors
+        const dotProduct = (vecA, vecB) => {
+            if (vecA.length !== vecB.length) {
+                throw new Error('Vectors must have the same length');
+            }
+            return vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
+        };
+
+        // Calculate magnitude (length) of a vector
+        const magnitude = (vec) => {
+            return Math.sqrt(vec.reduce((sum, val) => sum + val * val, 0));
+        };
+
+        // Calculate cosine similarity between two vectors
+        const cosineSimilarity = (vecA, vecB) => {
+            if (vecA.length !== vecB.length) {
+                throw new Error('Vectors must have the same length');
+            }
+            
+            const dot = dotProduct(vecA, vecB);
+            const magA = magnitude(vecA);
+            const magB = magnitude(vecB);
+            
+            if (magA === 0 || magB === 0) {
+                throw new Error('Cannot calculate cosine similarity for zero vector');
+            }
+            
+            return dot / (magA * magB);
+        };
+
+        // preload saved words
+        if (localStorage.getItem('words')) {
+            const array = JSON.parse(localStorage.getItem('words'))
+            for (let word of array) {
+                await addWord(word)
+            }
+        }
+    </script>
+
+
+</body>
+</html>
