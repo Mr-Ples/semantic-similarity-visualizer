@@ -45,7 +45,7 @@ function UI({ loaderData }: Route.ComponentProps) {
     "settings",
     {
       defaultValue: {
-        model: "nomic-ai/nomic-embed-text-v1.5",
+        model: "gemini-embedding-001",
         openaiKey: "",
         voyageKey: "",
         googleKey: "",
@@ -428,27 +428,8 @@ function UI({ loaderData }: Route.ComponentProps) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
-
-            <p className="text-sm text-gray-500">
-              (from{" "}
-              <a
-                href="https://huggingface.co/models?other=feature-extraction"
-                className="text-indigo-600 hover:text-indigo-500"
-              >
-                Hugging Face
-              </a>
-              , must support ONNX. Refresh page to reload model)
-            </p>
           </div>
 
-          <div className="flex justify-between pt-4 border-t border-gray-200">
-            <button
-              onClick={resetSettings}
-              className="px-4 py-2 bg-gray-100 text-gray-700 font-medium rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-            >
-              Reset
-            </button>
-          </div>
         </DialogContent>
       </Dialog>
 
