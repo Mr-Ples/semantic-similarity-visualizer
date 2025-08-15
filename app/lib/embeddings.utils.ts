@@ -30,22 +30,5 @@ export const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
 
 export interface WordData {
   word: string;
-  southDistance: number;
-  northDistance: number;
-}
-
-export async function computeWordPosition(
-  word: string, 
-  embedWord: (word: string) => Promise<number[]>,
-  southPole: string,
-  northPole: string
-): Promise<WordData> {
-  const southVector = await embedWord(southPole);
-  const northVector = await embedWord(northPole);
-  const wordVector = await embedWord(word);
-  
-  const southDistance = cosineSimilarity(wordVector, southVector);
-  const northDistance = cosineSimilarity(wordVector, northVector);
-  
-  return { word, southDistance, northDistance };
+  embedding: number[];
 }

@@ -4,6 +4,9 @@
 declare namespace Cloudflare {
 	interface Env {
 		VALUE_FROM_CLOUDFLARE: "Hello from Cloudflare";
+        GEMINI_API_KEY: string;
+        HUGGING_FACE_PRIVATE_KEY: string;
+        MISTRAL_API_KEY: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

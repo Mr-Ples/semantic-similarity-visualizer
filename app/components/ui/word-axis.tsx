@@ -13,10 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog"
-import type { WordData } from "~/lib/embeddings.utils"
+import type { WordPosition } from "~/lib/embeddings.client"
 
 interface WordAxisProps {
-  words: WordData[]
+  words: WordPosition[]
   northPole: string
   southPole: string
   onRemoveWord: (word: string) => void
@@ -100,7 +100,9 @@ export function WordAxis({
   }
 
   const handleSaveClick = () => {
-    const savedLists = JSON.parse(localStorage.getItem("savedWordLists") || "[]")
+    const savedLists = JSON.parse(
+      localStorage.getItem("savedWordLists") || "[]"
+    )
     setSaveName(`Word List ${savedLists.length + 1}`)
     setShowSaveDialog(true)
   }
@@ -145,11 +147,11 @@ export function WordAxis({
 
     // Group overlapping words and assign vertical positions
     const overlapGroups = []
-    
+
     for (let i = 0; i < wordPositions.length; i++) {
       const currentWord = wordPositions[i]
       let addedToGroup = false
-      
+
       // Try to add to existing group
       for (const group of overlapGroups) {
         const distance = Math.abs(currentWord.position - group[0].position)
@@ -159,13 +161,13 @@ export function WordAxis({
           break
         }
       }
-      
+
       // Create new group if not added to existing
       if (!addedToGroup) {
         overlapGroups.push([currentWord])
       }
     }
-    
+
     // Assign vertical positions to each group
     for (const group of overlapGroups) {
       if (group.length === 1) {
@@ -181,7 +183,10 @@ export function WordAxis({
             group[i].verticalOffset = 40 // Below
           } else {
             // Additional words alternate above and below
-            const offset = i % 2 === 1 ? -(Math.floor(i / 2) + 1) * 40 : (Math.floor(i / 2) + 1) * 40
+            const offset =
+              i % 2 === 1 ?
+                -(Math.floor(i / 2) + 1) * 40
+              : (Math.floor(i / 2) + 1) * 40
             group[i].verticalOffset = offset
           }
         }
@@ -191,29 +196,44 @@ export function WordAxis({
     return wordPositions
   }, [words])
 
-  function PolePopup({ isOpen, value, onChange, onSave, onCancel, placeholder, focusColor, position }: PolePopupProps) {
+  function PolePopup({
+    isOpen,
+    value,
+    onChange,
+    onSave,
+    onCancel,
+    placeholder,
+    focusColor,
+    position,
+  }: PolePopupProps) {
     const popupRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
       function handleClickOutside(event: MouseEvent) {
-        if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        if (
+          popupRef.current &&
+          !popupRef.current.contains(event.target as Node)
+        ) {
           onCancel()
         }
       }
 
       if (isOpen) {
-        document.addEventListener('mousedown', handleClickOutside)
+        document.addEventListener("mousedown", handleClickOutside)
       }
 
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside)
+        document.removeEventListener("mousedown", handleClickOutside)
       }
     }, [isOpen, onCancel])
 
     if (!isOpen) return null
 
     return (
-      <div className={`absolute top-full ${position === 'left' ? 'left-0' : 'right-0'} mt-2 z-50`} ref={popupRef}>
+      <div
+        className={`absolute top-full ${position === "left" ? "left-0" : "right-0"} mt-2 z-50`}
+        ref={popupRef}
+      >
         <div className="bg-white border border-gray-300 rounded-md shadow-lg p-3 min-w-[200px]">
           <div className="mb-2">
             <input
@@ -249,10 +269,12 @@ export function WordAxis({
       {isLoading && (
         <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white px-3 py-2 rounded-md shadow-md border border-gray-200">
           <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent"></div>
-          <span className="text-sm text-gray-700 font-medium">Recalculating</span>
+          <span className="text-sm text-gray-700 font-medium">
+            Recalculating
+          </span>
         </div>
       )}
-      
+
       {/* Small input in top right */}
       <div className="absolute top-4 right-4 z-20">
         <div className="flex gap-2">
@@ -266,7 +288,11 @@ export function WordAxis({
           />
           <button
             onClick={onAddWord}
-            disabled={isLoading || (wordInput.trim() && words?.some(w => w.word === wordInput.trim()))}
+            disabled={
+              isLoading ||
+              (wordInput.trim() &&
+                words?.some((w) => w.word === wordInput.trim()))
+            }
             className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Add
@@ -274,10 +300,15 @@ export function WordAxis({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="px-2 cursor-pointer py-1 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="6" r="2"/>
-                  <circle cx="12" cy="12" r="2"/>
-                  <circle cx="12" cy="18" r="2"/>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <circle cx="12" cy="6" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="12" cy="18" r="2" />
                 </svg>
               </button>
             </DropdownMenuTrigger>
@@ -288,9 +319,7 @@ export function WordAxis({
               >
                 Save All
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setShowClearConfirmation(true)}
-              >
+              <DropdownMenuItem onClick={() => setShowClearConfirmation(true)}>
                 Clear All
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -299,7 +328,10 @@ export function WordAxis({
       </div>
 
       {/* Clear Confirmation Dialog */}
-      <Dialog open={showClearConfirmation} onOpenChange={setShowClearConfirmation}>
+      <Dialog
+        open={showClearConfirmation}
+        onOpenChange={setShowClearConfirmation}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Clear All Words</DialogTitle>
@@ -415,12 +447,7 @@ export function WordAxis({
           const isNorthPole = wordData.word === northPole
           const isSouthPole = wordData.word === southPole
           const isPole = isNorthPole || isSouthPole
-          
-          // Don't render pole words since they're shown as labels
-          if (isPole) {
-            return null
-          }
-          
+
           return (
             <div
               key={wordData.word}
@@ -428,7 +455,11 @@ export function WordAxis({
                 e.stopPropagation()
                 onRemoveWord(wordData.word)
               }}
-              className="absolute px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md text-sm font-medium shadow-sm transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-colors duration-200 z-20"
+              className={`absolute px-4 py-2 rounded-md text-sm font-medium shadow-sm transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-colors duration-200 z-20 ${
+                isPole ? "hidden" : (
+                  "bg-gray-100 hover:bg-gray-200 text-gray-800"
+                )
+              }`}
               style={{
                 left: `${6 + (wordData.position / 100) * 88}%`,
                 top: `calc(50% - 20px + ${wordData.verticalOffset}px)`,

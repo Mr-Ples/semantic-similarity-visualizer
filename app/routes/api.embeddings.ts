@@ -1,21 +1,19 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
-import { json } from "react-router"
 import {
-  computeWordPositionWithSettings,
+  getWordEmbedding,
   type EmbeddingSettings,
-  type WordData,
 } from "~/lib/embeddings.server"
+import type { WordData } from "~/lib/embeddings.utils"
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export async function loader({ request, context }: LoaderFunctionArgs) {
   const url = new URL(request.url)
   const word = url.searchParams.get("word")
-  const model =
-    url.searchParams.get("model") || "nomic-ai/nomic-embed-text-v1.5"
+  const selectedService = url.searchParams.get("selectedService") || "google"
   const openaiKey = url.searchParams.get("openaiKey") || ""
   const voyageKey = url.searchParams.get("voyageKey") || ""
   const googleKey = url.searchParams.get("googleKey") || ""
-  const northPole = url.searchParams.get("northPole") || "good"
-  const southPole = url.searchParams.get("southPole") || "evil"
+  const huggingFaceKey = url.searchParams.get("huggingFaceKey") || ""
+  const mistralKey = url.searchParams.get("mistralKey") || ""
 
   if (!word) {
     return { error: "Word parameter is required" }
@@ -23,34 +21,36 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   try {
     const settings: EmbeddingSettings = {
-      model,
+      model: selectedService,
       openaiKey,
       voyageKey,
       googleKey,
-      northPole,
-      southPole,
+      huggingFaceKey,
+      mistralKey,
+      northPole: "",
+      southPole: "",
     }
 
-    const wordData = await computeWordPositionWithSettings(word, settings)
+    const wordData = await getWordEmbedding(word, settings, context)
     return wordData
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Unknown error" }
   }
 }
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request, context }: ActionFunctionArgs) {
   const formData = await request.formData()
   const intent = formData.get("intent")
 
   if (intent === "addWord") {
     const word = formData.get("word") as string
-    const model =
-      (formData.get("model") as string) || "nomic-ai/nomic-embed-text-v1.5"
+    const selectedService =
+      (formData.get("selectedService") as string) || "mistral"
     const openaiKey = (formData.get("openaiKey") as string) || ""
     const voyageKey = (formData.get("voyageKey") as string) || ""
     const googleKey = (formData.get("googleKey") as string) || ""
-    const northPole = (formData.get("northPole") as string) || "good"
-    const southPole = (formData.get("southPole") as string) || "evil"
+    const huggingFaceKey = (formData.get("huggingFaceKey") as string) || ""
+    const mistralKey = (formData.get("mistralKey") as string) || ""
 
     if (!word) {
       return { error: "Word is required" }
@@ -58,15 +58,17 @@ export async function action({ request }: ActionFunctionArgs) {
 
     try {
       const settings: EmbeddingSettings = {
-        model,
+        model: selectedService,
         openaiKey,
         voyageKey,
         googleKey,
-        northPole,
-        southPole,
+        huggingFaceKey,
+        mistralKey,
+        northPole: "",
+        southPole: "",
       }
 
-      const wordData = await computeWordPositionWithSettings(word, settings)
+      const wordData = await getWordEmbedding(word, settings, context)
       return wordData
     } catch (error) {
       return { error: error instanceof Error ? error.message : "Unknown error" }
@@ -75,13 +77,13 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (intent === "computeMultiple") {
     const words = formData.get("words") as string
-    const model =
-      (formData.get("model") as string) || "nomic-ai/nomic-embed-text-v1.5"
+    const selectedService =
+      (formData.get("selectedService") as string) || "mistral"
     const openaiKey = (formData.get("openaiKey") as string) || ""
     const voyageKey = (formData.get("voyageKey") as string) || ""
     const googleKey = (formData.get("googleKey") as string) || ""
-    const northPole = (formData.get("northPole") as string) || "good"
-    const southPole = (formData.get("southPole") as string) || "evil"
+    const huggingFaceKey = (formData.get("huggingFaceKey") as string) || ""
+    const mistralKey = (formData.get("mistralKey") as string) || ""
 
     if (!words) {
       return { error: "Words are required" }
@@ -90,17 +92,19 @@ export async function action({ request }: ActionFunctionArgs) {
     try {
       const wordList = JSON.parse(words) as string[]
       const settings: EmbeddingSettings = {
-        model,
+        model: selectedService,
         openaiKey,
         voyageKey,
         googleKey,
-        northPole,
-        southPole,
+        huggingFaceKey,
+        mistralKey,
+        northPole: "",
+        southPole: "",
       }
 
       const wordDataList: WordData[] = []
       for (const word of wordList) {
-        const wordData = await computeWordPositionWithSettings(word, settings)
+        const wordData = await getWordEmbedding(word, settings, context)
         wordDataList.push(wordData)
       }
 
