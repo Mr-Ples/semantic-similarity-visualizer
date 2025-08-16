@@ -474,7 +474,7 @@ function UI({ loaderData }: Route.ComponentProps) {
     })
   }
 
-  const saveWords = (customName?: string) => {
+  const saveWords = (customName?: string, replaceId?: string | null) => {
     if (!words || words.length === 0) return
 
     const currentLists = JSON.parse(
@@ -483,7 +483,7 @@ function UI({ loaderData }: Route.ComponentProps) {
     const timestamp = new Date().toISOString()
     const defaultName = `Word List ${currentLists.length + 1}`
     const wordList = {
-      id: timestamp,
+      id: replaceId || timestamp,
       name: customName || defaultName,
       timestamp: timestamp,
       words: words,
@@ -492,7 +492,17 @@ function UI({ loaderData }: Route.ComponentProps) {
       southPole: settings.southPole,
     }
 
-    const newLists = [...currentLists, wordList]
+    let newLists
+    if (replaceId) {
+      // Replace existing list
+      newLists = currentLists.map((list: any) => 
+        list.id === replaceId ? wordList : list
+      )
+    } else {
+      // Add new list
+      newLists = [...currentLists, wordList]
+    }
+    
     localStorage.setItem("savedWordLists", JSON.stringify(newLists))
     setSavedLists(newLists)
   }
@@ -871,6 +881,15 @@ function UI({ loaderData }: Route.ComponentProps) {
                 className="text-indigo-600 hover:text-indigo-500"
               >
                 github.com/DefenderOfBasic/good-and-evil-concepts
+              </a>
+            </p>
+            <p className="text-gray-600">
+              Source code for this project:{" "}
+              <a
+                href="https://github.com/Mr-Ples/semantic-similarity-visualizer"
+                className="text-indigo-600 hover:text-indigo-500"
+              >
+                https://github.com/Mr-Ples/semantic-similarity-visualizer
               </a>
             </p>
           </div>

@@ -26,7 +26,7 @@ interface WordAxisProps {
   onWordInputChange: (value: string) => void
   onAddWord: () => void
   onClearAll: () => void
-  onSaveWords: (customName?: string) => void
+  onSaveWords: (customName?: string, replaceId?: string | null) => void
   isLoading: boolean
   onKeyPress: (e: React.KeyboardEvent) => void
 }
@@ -62,6 +62,7 @@ export function WordAxis({
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState("")
+  const [selectedListId, setSelectedListId] = useState<string | null>(null)
   const [tempNorthPole, setTempNorthPole] = useState(northPole)
   const [tempSouthPole, setTempSouthPole] = useState(southPole)
 
@@ -104,16 +105,18 @@ export function WordAxis({
       localStorage.getItem("savedWordLists") || "[]"
     )
     setSaveName(`Word List ${savedLists.length + 1}`)
+    setSelectedListId(null)
     setShowSaveDialog(true)
   }
 
   const handleSaveConfirm = () => {
-    onSaveWords(saveName)
+    onSaveWords(saveName, selectedListId)
     setShowSaveDialog(false)
   }
 
   const handleSaveCancel = () => {
     setShowSaveDialog(false)
+    setSelectedListId(null)
   }
 
   // Calculate positions for visualization
@@ -132,6 +135,9 @@ export function WordAxis({
         (wordData.southDistance + wordData.northDistance)
       const normalizedPosition =
         ((rawPosition - minPos) / (maxPos - minPos)) * 100
+
+      // Debug logging
+      console.log(`${wordData.word}: north=${wordData.northDistance.toFixed(3)}, south=${wordData.southDistance.toFixed(3)}, raw=${rawPosition.toFixed(3)}, norm=${normalizedPosition.toFixed(1)}`)
 
       return {
         word: wordData.word,
@@ -362,10 +368,10 @@ export function WordAxis({
           <DialogHeader>
             <DialogTitle>Save Word List</DialogTitle>
             <DialogDescription>
-              Enter a name for your word list:
+              Enter a name for your word list or choose an existing one to replace:
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <input
               type="text"
               value={saveName}
@@ -378,6 +384,38 @@ export function WordAxis({
               placeholder="Enter word list name"
               autoFocus
             />
+            
+            {/* Existing word lists */}
+            {(() => {
+              const savedLists = JSON.parse(
+                localStorage.getItem("savedWordLists") || "[]"
+              )
+              if (savedLists.length === 0) return null
+              
+              return (
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">Or replace existing list:</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {savedLists.map((list: any) => (
+                      <button
+                        key={list.id}
+                        onClick={() => {
+                          setSelectedListId(list.id)
+                          setSaveName(list.name)
+                        }}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                          selectedListId === list.id
+                            ? "bg-blue-100 text-blue-800 border border-blue-300"
+                            : "bg-gray-50 hover:bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {list.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
           </div>
           <DialogFooter>
             <button
@@ -390,7 +428,7 @@ export function WordAxis({
               onClick={handleSaveConfirm}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 "
             >
-              Save
+              {selectedListId ? "Replace" : "Save"}
             </button>
           </DialogFooter>
         </DialogContent>
