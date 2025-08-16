@@ -131,7 +131,7 @@ function UI({ loaderData }: Route.ComponentProps) {
     "settings",
     {
       defaultValue: {
-        selectedService: "mistral",
+        selectedService: "google",
         openaiKey: "",
         voyageKey: "",
         googleKey: "",
