@@ -62,6 +62,50 @@ class ErrorBoundary extends Component<
     console.error("Error caught by boundary:", error, errorInfo)
   }
 
+  exportAllData = () => {
+    try {
+      // Get all saved word lists
+      const savedWordLists = JSON.parse(localStorage.getItem("savedWordLists") || "[]")
+      
+      // Get current words and settings
+      const currentWords = JSON.parse(localStorage.getItem("words") || "[]")
+      const settings = JSON.parse(localStorage.getItem("settings") || "{}")
+      const poleEmbeddings = JSON.parse(localStorage.getItem("poleEmbeddings") || "{}")
+      
+      // Create export data
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        savedWordLists: savedWordLists,
+        currentWords: currentWords,
+        settings: {
+          ...settings,
+          // Remove API keys for security
+          openaiKey: settings.openaiKey ? "[REDACTED]" : "",
+          voyageKey: settings.voyageKey ? "[REDACTED]" : "",
+          googleKey: settings.googleKey ? "[REDACTED]" : "",
+          huggingFaceKey: settings.huggingFaceKey ? "[REDACTED]" : "",
+          mistralKey: settings.mistralKey ? "[REDACTED]" : "",
+        },
+        poleEmbeddings: poleEmbeddings
+      }
+      
+      // Create and download file
+      const dataStr = JSON.stringify(exportData, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `semantic-visualizer-backup-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Failed to export data:", error)
+      alert("Failed to export data. Please try again.")
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -87,23 +131,42 @@ class ErrorBoundary extends Component<
               <p className="text-sm text-red-700 mb-4">
                 An unexpected error occurred. Please try refreshing the page.
               </p>
-              <button
-                onClick={() => {
-                  window.location.reload()
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                Refresh Page
-              </button>
-              <button
-                onClick={() => {
-                  localStorage.clear()
-                  window.location.reload()
-                }}
-                className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-              >
-                Clear Cache
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={this.exportAllData}
+                  className="w-full bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 mb-2"
+                >
+                  Export Word Lists
+                </button>
+                <button
+                  onClick={() => {
+                    window.location.reload()
+                  }}
+                  className="w-full bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Refresh Page
+                </button>
+                <button
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      "⚠️ WARNING: This will permanently delete ALL data including:\n\n" +
+                      "• All saved word lists\n" +
+                      "• Current words and embeddings\n" +
+                      "• API keys (you'll need to re-enter them)\n" +
+                      "• All settings and preferences\n\n" +
+                      "Make sure you have exported your word lists first!\n\n" +
+                      "Are you sure you want to clear all cache?"
+                    )
+                    if (confirmed) {
+                      localStorage.clear()
+                      window.location.reload()
+                    }
+                  }}
+                  className="w-full bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  Clear Cache
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -124,6 +187,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <UI {...loaderData} />
       </ErrorBoundary>
     : <div>Loading...</div>
+}
+
+// Test component that will crash when rendered
+function CrashTestComponent({ shouldCrash }: { shouldCrash: boolean }) {
+  if (shouldCrash) {
+    throw new Error("Test error for error boundary - this should trigger the export button!")
+  }
+  return null
 }
 
 function UI({ loaderData }: Route.ComponentProps) {
@@ -179,6 +250,7 @@ function UI({ loaderData }: Route.ComponentProps) {
     settings.selectedService
   )
   const [savedLists, setSavedLists] = useState<any[]>([])
+  const [shouldCrash, setShouldCrash] = useState(false)
   const axisRef = useRef<HTMLDivElement>(null)
   const previousModelRef = useRef<string>("")
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -658,6 +730,7 @@ function UI({ loaderData }: Route.ComponentProps) {
   };
   return hasValidApiKey() ? (
     <div className="min-h-screen bg-gray-50">
+      <CrashTestComponent shouldCrash={shouldCrash} />
       {/* Top Bar */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -668,6 +741,14 @@ function UI({ loaderData }: Route.ComponentProps) {
               </h1>
             </div>
             <div className="flex gap-2">
+              {/* <button
+                onClick={() => {
+                  setShouldCrash(true)
+                }}
+                className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Test Error
+              </button> */}
               <button
                 onClick={() => setShowMyWords(true)}
                 className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
