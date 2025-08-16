@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 import { Services, type EmbeddingModels } from "~/lib/constants"
-import { getWordEmbedding } from "~/lib/embeddings.server"
+import { getWordEmbedding } from "~/lib/embeddings.client"
 
 export enum EmbeddingAction {
   GET_EMBEDDING = "getEmbedding",
