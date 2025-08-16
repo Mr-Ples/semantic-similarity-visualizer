@@ -14,11 +14,13 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog"
 import type { WordPosition } from "~/lib/embeddings.client"
+import { MODELS } from "~/lib/constants"
 
 interface WordAxisProps {
   words: WordPosition[]
   northPole: string
   southPole: string
+  selectedService: string
   onRemoveWord: (word: string) => void
   onEditNorthPole: (value: string) => void
   onEditSouthPole: (value: string) => void
@@ -47,6 +49,7 @@ export function WordAxis({
   words,
   northPole,
   southPole,
+  selectedService,
   onRemoveWord,
   onEditNorthPole,
   onEditSouthPole,
@@ -139,7 +142,9 @@ export function WordAxis({
         ((rawPosition - minPos) / (maxPos - minPos)) * 100
 
       // Debug logging
-      console.log(`${wordData.word}: north=${wordData.northDistance.toFixed(3)}, south=${wordData.southDistance.toFixed(3)}, raw=${rawPosition.toFixed(3)}, norm=${normalizedPosition.toFixed(1)}`)
+      console.log(
+        `${wordData.word}: north=${wordData.northDistance.toFixed(3)}, south=${wordData.southDistance.toFixed(3)}, raw=${rawPosition.toFixed(3)}, norm=${normalizedPosition.toFixed(1)}`
+      )
 
       return {
         word: wordData.word,
@@ -285,7 +290,10 @@ export function WordAxis({
 
       {/* Small input in top right */}
       <div className="absolute top-4 right-4 z-20">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
+            {MODELS.find((model) => model.service === selectedService)?.model}
+          </span>
           <input
             type="text"
             value={wordInput}
@@ -376,7 +384,8 @@ export function WordAxis({
           <DialogHeader>
             <DialogTitle>Save Word List</DialogTitle>
             <DialogDescription>
-              Enter a name for your word list or choose an existing one to replace:
+              Enter a name for your word list or choose an existing one to
+              replace:
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -392,17 +401,19 @@ export function WordAxis({
               placeholder="Enter word list name"
               autoFocus
             />
-            
+
             {/* Existing word lists */}
             {(() => {
               const savedLists = JSON.parse(
                 localStorage.getItem("savedWordLists") || "[]"
               )
               if (savedLists.length === 0) return null
-              
+
               return (
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">Or replace existing list:</p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    Or replace existing list:
+                  </p>
                   <div className="max-h-32 overflow-y-auto space-y-1">
                     {savedLists.map((list: any) => (
                       <button
@@ -412,9 +423,9 @@ export function WordAxis({
                           setSaveName(list.name)
                         }}
                         className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
-                          selectedListId === list.id
-                            ? "bg-blue-100 text-blue-800 border border-blue-300"
-                            : "bg-gray-50 hover:bg-gray-100 text-gray-700"
+                          selectedListId === list.id ?
+                            "bg-blue-100 text-blue-800 border border-blue-300"
+                          : "bg-gray-50 hover:bg-gray-100 text-gray-700"
                         }`}
                       >
                         {list.name}

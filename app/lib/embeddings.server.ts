@@ -1,5 +1,6 @@
 import type { AppLoadContext } from "react-router"
 import { type WordData } from "./embeddings.utils"
+import { MODELS, Services } from "./constants"
 
 export interface EmbeddingSettings {
   model: string
@@ -15,16 +16,19 @@ export interface EmbeddingSettings {
 export async function embedWord(
   word: string,
   settings: EmbeddingSettings,
-  context: AppLoadContext
 ): Promise<{ embedding: number[]; model: string }> {
-  const { model, openaiKey, voyageKey, googleKey, huggingFaceKey, mistralKey } =
+  const { model: service, openaiKey, voyageKey, googleKey, huggingFaceKey, mistralKey } =
     settings
 
+  const model = MODELS.find((model) => model.service === service)?.model;
+  if (!model) {
+    throw new Error(`No valid model for ${service}`)
+  }
+
   // Use the selected service to determine which API to use
-  if (model === "google" && googleKey !== "") {
-    // const key = googleKey || context.cloudflare.env.GEMINI_API_KEY;
+  if (service === Services.GOOGLE && googleKey !== "") {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${googleKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${googleKey}`,
       {
         method: "POST",
         headers: {
@@ -43,14 +47,21 @@ export async function embedWord(
       }
     )
 
-    const data = await response.json()
+    const data = await response.json() as {
+      error?: string
+      embedding?: { values: number[] }
+    }
     if (data?.error) {
       throw new Error(JSON.stringify(data.error))
     }
-    return { embedding: data.embedding.values, model: "gemini-embedding-001" }
+    if (!data?.embedding?.values) {
+      throw new Error(JSON.stringify(data))
+    }
+    return { embedding: data.embedding.values, model: model }
   }
 
-  if (model === "voyage" && voyageKey !== "") {
+  // TODO test
+  if (service === Services.VOYAGE && voyageKey !== "") {
     const response = await fetch("https://api.voyageai.com/v1/embeddings", {
       method: "POST",
       headers: {
@@ -59,20 +70,24 @@ export async function embedWord(
       },
       body: JSON.stringify({
         "input": word,
-        "model": "voyage-3-large",
+        "model": MODELS.find((model) => model.service === service)?.model,
         "input_type": "document",
       }),
     })
 
-    const data = await response.json()
+    const data = await response.json() as {
+      error?: string
+      data?: { embedding: number[] }[]
+    }
     console.log(data)
     if (!data.data?.[0]?.embedding) {
       throw new Error(JSON.stringify(data))
     }
-    return { embedding: data.data[0].embedding, model: "voyage-3-large" }
+    return { embedding: data.data[0].embedding, model: model }
   }
 
-  if (model === "openai" && openaiKey !== "") {
+  // TODO test
+  if (service === Services.OPENAI && openaiKey !== "") {
     const response = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
@@ -81,20 +96,26 @@ export async function embedWord(
       },
       body: JSON.stringify({
         "input": word,
-        "model": "text-embedding-3-large",
+        "model": MODELS.find((model) => model.service === service)?.model,
         "encoding_format": "float",
       }),
     })
 
-    const data = await response.json()
+    const data = await response.json() as {
+      error?: string
+      data?: { embedding: number[] }[]
+    }
     // console.log(data)
     if (data?.error) {
       throw new Error(JSON.stringify(data.error))
     }
-    return { embedding: data.data[0].embedding, model: "text-embedding-3-large" }
+    if (!data?.data?.[0]?.embedding) {
+      throw new Error(JSON.stringify(data))
+    }
+    return { embedding: data.data[0].embedding, model: model }
   }
 
-  if (model === "mistral" && mistralKey !== "" ) {
+  if (service === Services.MISTRAL && mistralKey !== "" ) {
     const key = mistralKey
     const response = await fetch("https://api.mistral.ai/v1/embeddings", {
       method: "POST",
@@ -103,22 +124,25 @@ export async function embedWord(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        "model": "mistral-embed",
+        "model": MODELS.find((model) => model.service === service)?.model,
         "input": word,
       }),
     })
 
-    const data = await response.json()
+    const data = await response.json() as {
+      error?: string
+      data?: { embedding: number[] }[]
+    }
     if (data?.error) {
       throw new Error(JSON.stringify(data.error))
     }
     if (!data?.data?.[0]?.embedding) {
       throw new Error(JSON.stringify(data))
     }
-    return { embedding: data?.data?.[0]?.embedding, model: "mistral-embed" }
+    return { embedding: data?.data?.[0]?.embedding, model: model }
   }
 
-  if (model === "huggingface" && huggingFaceKey !== "") {
+  if (service === Services.HUGGINGFACE && huggingFaceKey !== "") {
     const response = await fetch(
       "https://router.huggingface.co/nebius/v1/embeddings",
       {
@@ -129,12 +153,16 @@ export async function embedWord(
         },
         body: JSON.stringify({
           "input": word,
-          "model": "Qwen/Qwen3-Embedding-8B",
+          "model": MODELS.find((model) => model.service === service)?.model,
         }),
       }
     )
 
-    const data = await response.json()
+    const data = await response.json() as {
+      error?: string
+      detail?: string
+      data?: { embedding: number[] }[]
+    }
 
     if (data?.error) {
       throw new Error(JSON.stringify(data.error))
@@ -142,10 +170,10 @@ export async function embedWord(
     if (data?.detail) {
       throw new Error(JSON.stringify(data.detail))
     }
-    if (!data.data[0]?.embedding) {
+    if (!data.data?.[0]?.embedding) {
       throw new Error(JSON.stringify(data))
     }
-    return { embedding: data.data[0]?.embedding, model: "Qwen/Qwen3-Embedding-8B" }
+    return { embedding: data.data[0]?.embedding, model: model }
   }
 
   throw new Error(
@@ -158,7 +186,7 @@ export async function getWordEmbedding(
   settings: EmbeddingSettings,
   context: AppLoadContext
 ): Promise<WordData> {
-  const result = await embedWord(word, settings, context)
+  const result = await embedWord(word, settings)
   if (!Array.isArray(result.embedding)) {
     throw new Error("Embedding must be an array")
   }

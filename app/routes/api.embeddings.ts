@@ -1,4 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
+import { Services } from "~/lib/constants"
 import {
   getWordEmbedding,
   type EmbeddingSettings,
@@ -8,7 +9,7 @@ import type { WordData } from "~/lib/embeddings.utils"
 export async function loader({ request, context }: LoaderFunctionArgs) {
   const url = new URL(request.url)
   const word = url.searchParams.get("word")
-  const selectedService = url.searchParams.get("selectedService") || "google"
+  const selectedService = url.searchParams.get("selectedService") || Services.GOOGLE
   const openaiKey = url.searchParams.get("openaiKey") || ""
   const voyageKey = url.searchParams.get("voyageKey") || ""
   const googleKey = url.searchParams.get("googleKey") || ""

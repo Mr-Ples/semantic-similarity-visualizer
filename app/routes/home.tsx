@@ -6,6 +6,7 @@ import {
   Suspense,
   Component,
   type ReactNode,
+  useMemo,
 } from "react"
 import type { WordData } from "~/lib/embeddings.client"
 import {
@@ -19,7 +20,9 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog"
 import { WordAxis } from "~/components/ui/word-axis"
+import { ApiKeyInputs } from "~/components/ui/api-key-input"
 import { useLocalStorageValue, useMountEffect } from "@react-hookz/web"
+import { MODELS, Services } from "~/lib/constants"
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -65,13 +68,17 @@ class ErrorBoundary extends Component<
   exportAllData = () => {
     try {
       // Get all saved word lists
-      const savedWordLists = JSON.parse(localStorage.getItem("savedWordLists") || "[]")
-      
+      const savedWordLists = JSON.parse(
+        localStorage.getItem("savedWordLists") || "[]"
+      )
+
       // Get current words and settings
       const currentWords = JSON.parse(localStorage.getItem("words") || "[]")
       const settings = JSON.parse(localStorage.getItem("settings") || "{}")
-      const poleEmbeddings = JSON.parse(localStorage.getItem("poleEmbeddings") || "{}")
-      
+      const poleEmbeddings = JSON.parse(
+        localStorage.getItem("poleEmbeddings") || "{}"
+      )
+
       // Create export data
       const exportData = {
         exportedAt: new Date().toISOString(),
@@ -86,16 +93,16 @@ class ErrorBoundary extends Component<
           huggingFaceKey: settings.huggingFaceKey ? "[REDACTED]" : "",
           mistralKey: settings.mistralKey ? "[REDACTED]" : "",
         },
-        poleEmbeddings: poleEmbeddings
+        poleEmbeddings: poleEmbeddings,
       }
-      
+
       // Create and download file
       const dataStr = JSON.stringify(exportData, null, 2)
-      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const dataBlob = new Blob([dataStr], { type: "application/json" })
       const url = URL.createObjectURL(dataBlob)
-      const link = document.createElement('a')
+      const link = document.createElement("a")
       link.href = url
-      link.download = `semantic-visualizer-backup-${new Date().toISOString().split('T')[0]}.json`
+      link.download = `semantic-visualizer-backup-${new Date().toISOString().split("T")[0]}.json`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -150,12 +157,12 @@ class ErrorBoundary extends Component<
                   onClick={() => {
                     const confirmed = window.confirm(
                       "⚠️ WARNING: This will permanently delete ALL data including:\n\n" +
-                      "• All saved word lists\n" +
-                      "• Current words and embeddings\n" +
-                      "• API keys (you'll need to re-enter them)\n" +
-                      "• All settings and preferences\n\n" +
-                      "Make sure you have exported your word lists first!\n\n" +
-                      "Are you sure you want to clear all cache?"
+                        "• All saved word lists\n" +
+                        "• Current words and embeddings\n" +
+                        "• API keys (you'll need to re-enter them)\n" +
+                        "• All settings and preferences\n\n" +
+                        "Make sure you have exported your word lists first!\n\n" +
+                        "Are you sure you want to clear all cache?"
                     )
                     if (confirmed) {
                       localStorage.clear()
@@ -182,27 +189,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   useMountEffect(() => {
     setIsMounted(true)
   })
-  return isMounted ?
-      <ErrorBoundary>
-        <UI {...loaderData} />
-      </ErrorBoundary>
-    : <div>Loading...</div>
-}
-
-// Test component that will crash when rendered
-function CrashTestComponent({ shouldCrash }: { shouldCrash: boolean }) {
-  if (shouldCrash) {
-    throw new Error("Test error for error boundary - this should trigger the export button!")
-  }
-  return null
-}
-
-function UI({ loaderData }: Route.ComponentProps) {
   const { value: settings, set: setSettings } = useLocalStorageValue<Settings>(
     "settings",
     {
       defaultValue: {
-        selectedService: "google",
+        selectedService: Services.GOOGLE,
         openaiKey: "",
         voyageKey: "",
         googleKey: "",
@@ -213,24 +204,49 @@ function UI({ loaderData }: Route.ComponentProps) {
       },
     }
   )
+  return isMounted && settings ?
+      <ErrorBoundary>
+        <UI setSettings={setSettings} settings={settings} {...loaderData} />
+      </ErrorBoundary>
+    : <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+}
 
-  // Guard against undefined settings during initial render
-  if (!settings) {
-    return <div>Loading...</div>
+// Test component that will crash when rendered
+function CrashTestComponent({ shouldCrash }: { shouldCrash: boolean }) {
+  if (shouldCrash) {
+    throw new Error(
+      "Test error for error boundary - this should trigger the export button!"
+    )
   }
+  return null
+}
 
+function UI({
+  loaderData,
+  settings,
+  setSettings,
+}: Route.ComponentProps & {
+  settings: Settings
+  setSettings: (settings: Settings) => void
+}) {
   // Check if API key is configured for selected service
   const hasValidApiKey = () => {
-    return settings.mistralKey.trim() !== "" || settings.openaiKey.trim() !== "" || settings.voyageKey.trim() !== "" || settings.googleKey.trim() !== "" || settings.huggingFaceKey.trim() !== ""
+    return MODELS.some((modelData) => settings[modelData.key].trim() !== "")
   }
-  const [tempSettings, setTempSettings] = useState(settings);
- 
+  const [tempSettings, setTempSettings] = useState(settings)
   const { value: words, set: setWords } = useLocalStorageValue<WordData[]>(
     "words",
     {
       defaultValue: [],
     }
   )
+
+  const wordsModel = useMemo(() => {
+    return words?.[0]?.model
+  }, [words])
+
   const { value: poleEmbeddings, set: setPoleEmbeddings } =
     useLocalStorageValue<{
       northPole: WordData | null
@@ -417,7 +433,10 @@ function UI({ loaderData }: Route.ComponentProps) {
         method: "POST",
         body: formData,
       })
-      const data = await response.json()
+      const data = await response.json() as {
+        error?: string
+        wordData?: WordData[]
+      }
       if (data.error) {
         setError(data.error)
       } else if (Array.isArray(data)) {
@@ -460,7 +479,10 @@ function UI({ loaderData }: Route.ComponentProps) {
         method: "POST",
         body: formData,
       })
-      const data = await response.json()
+      const data = await response.json() as {
+        error?: string
+        wordData?: WordData[]
+      }
       if (data.error) {
         setError(data.error)
       } else if (Array.isArray(data)) {
@@ -508,7 +530,10 @@ function UI({ loaderData }: Route.ComponentProps) {
         method: "POST",
         body: formData,
       })
-      const data = await response.json()
+      const data = await response.json() as {
+        error?: string
+        wordData?: WordData
+      }
       if (data.error) {
         setError(data.error)
       } else {
@@ -574,14 +599,14 @@ function UI({ loaderData }: Route.ComponentProps) {
     let newLists
     if (replaceId) {
       // Replace existing list
-      newLists = currentLists.map((list: any) => 
+      newLists = currentLists.map((list: any) =>
         list.id === replaceId ? wordList : list
       )
     } else {
       // Add new list
       newLists = [...currentLists, wordList]
     }
-    
+
     localStorage.setItem("savedWordLists", JSON.stringify(newLists))
     setSavedLists(newLists)
   }
@@ -632,11 +657,11 @@ function UI({ loaderData }: Route.ComponentProps) {
 
   const exportWordList = (savedList: any) => {
     const dataStr = JSON.stringify(savedList, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const dataBlob = new Blob([dataStr], { type: "application/json" })
     const url = URL.createObjectURL(dataBlob)
-    const link = document.createElement('a')
+    const link = document.createElement("a")
     link.href = url
-    link.download = `${savedList.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`
+    link.download = `${savedList.name.replace(/[^a-zA-Z0-9]/g, "_")}.json`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -668,7 +693,7 @@ function UI({ loaderData }: Route.ComponentProps) {
     reader.onload = (e) => {
       try {
         const importedList = JSON.parse(e.target?.result as string)
-        
+
         // Validate the imported data structure
         if (!importedList.words || !Array.isArray(importedList.words)) {
           setError("Invalid file format: missing words array")
@@ -681,7 +706,10 @@ function UI({ loaderData }: Route.ComponentProps) {
           ...importedList,
           id: timestamp,
           timestamp: timestamp,
-          name: importedList.name ? `${importedList.name} (Imported)` : `Imported List`
+          name:
+            importedList.name ?
+              `${importedList.name} (Imported)`
+            : `Imported List`,
         }
 
         const currentLists = JSON.parse(
@@ -696,52 +724,32 @@ function UI({ loaderData }: Route.ComponentProps) {
       }
     }
     reader.readAsText(file)
-    
+
     // Reset the input
-    event.target.value = ''
+    event.target.value = ""
   }
 
-  const resetSettings = () => {
-    const defaultSettings: Settings = {
-      selectedService: "mistral",
-      openaiKey: "",
-      voyageKey: "",
-      googleKey: "",
-      huggingFaceKey: "",
-      mistralKey: "",
-      northPole: "good",
-      southPole: "evil",
-    }
-    setSettings(defaultSettings)
-  }
   const hasValidTempApiKey = () => {
-    if (tempSettings.selectedService === "openai") {
-      return tempSettings.openaiKey.trim() !== "";
-    } else if (tempSettings.selectedService === "voyage") {
-      return tempSettings.voyageKey.trim() !== "";
-    } else if (tempSettings.selectedService === "google") {
-      return tempSettings.googleKey.trim() !== "";
-    } else if (tempSettings.selectedService === "huggingface") {
-      return tempSettings.huggingFaceKey.trim() !== "";
-    } else if (tempSettings.selectedService === "mistral") {
-      return tempSettings.mistralKey.trim() !== "";
-    }
-    return false;
-  };
-  return hasValidApiKey() ? (
-    <div className="min-h-screen bg-gray-50">
-      <CrashTestComponent shouldCrash={shouldCrash} />
-      {/* Top Bar */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">
-                Semantic Similarity Visualizer
-              </h1>
-            </div>
-            <div className="flex gap-2">
-              {/* <button
+    return MODELS.some((modelData) => tempSettings[modelData.key].trim() !== "")
+  }
+
+  const selectedServiceData =
+    MODELS.find((model) => model.service === tempSelectedService) || MODELS[0]
+
+  return hasValidApiKey() ?
+      <div className="min-h-screen bg-gray-50">
+        <CrashTestComponent shouldCrash={shouldCrash} />
+        {/* Top Bar */}
+        <div className="bg-white shadow-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center">
+                <h1 className="max-md:hidden text-xl font-semibold text-gray-900">
+                  Semantic Similarity Visualizer
+                </h1>
+              </div>
+              <div className="flex gap-2">
+                {/* <button
                 onClick={() => {
                   setShouldCrash(true)
                 }}
@@ -749,616 +757,354 @@ function UI({ loaderData }: Route.ComponentProps) {
               >
                 Test Error
               </button> */}
-              <button
-                onClick={() => setShowMyWords(true)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                My Words
-              </button>
-              <button
-                onClick={() => setShowAbout(true)}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                About
-              </button>
-              <button
-                onClick={() => {
-                  setTempSelectedService(settings.selectedService)
-                  setShowSettings(true)
-                }}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <svg
-                  className="w-4 h-4 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+                <button
+                  onClick={() => setShowMyWords(true)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-                Settings
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Error Display */}
-      {error && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-          <div className="bg-red-50 border border-red-200 rounded-md p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg
-                  className="h-5 w-5 text-red-400"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
+                  My Words
+                </button>
+                <button
+                  onClick={() => setShowAbout(true)}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>{error}</p>
-                </div>
-                <div className="mt-4">
-                  <button
-                    onClick={() => setError(null)}
-                    className="bg-red-50 text-red-700 hover:bg-red-100 px-3 py-2 rounded-md text-sm font-medium"
+                  About
+                </button>
+                <button
+                  onClick={() => {
+                    setTempSelectedService(settings.selectedService)
+                    setShowSettings(true)
+                  }}
+                  className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    Dismiss
-                  </button>
-                </div>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  Settings
+                </button>
               </div>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {words && words.length > 0 && (
-          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              <span className="font-medium">Current model:</span>{" "}
-              {words[0].model}
-            </p>
+        {/* Error Display */}
+        {error && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+            <div className="bg-red-50 border border-red-200 rounded-md p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg
+                    className="h-5 w-5 text-red-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-red-800">Error</h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <p>{error}</p>
+                  </div>
+                  <div className="mt-4">
+                    <button
+                      onClick={() => setError(null)}
+                      className="bg-red-50 text-red-700 hover:bg-red-100 px-3 py-2 rounded-md text-sm font-medium"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
-        <div className="bg-white rounded-lg shadow-sm">
-          <div
-            ref={axisRef}
-            className="relative h-[80vh] overflow-y-auto overflow-x-hidden"
-          >
-            <WordAxis
-              key={wordPositions?.length + "positions"}
-              words={wordPositions}
-              onRemoveWord={removeWord}
-              northPole={settings.northPole}
-              southPole={settings.southPole}
-              onEditNorthPole={async (newPole) => {
-                const oldPole = settings.northPole
-                setSettings((prev) => ({ ...prev, northPole: newPole }))
-                // Remove the old pole from words if it exists
-                if (oldPole && words?.some((w) => w.word === oldPole)) {
-                  const newWords = words.filter((w) => w.word !== oldPole)
-                  setWords(newWords)
-                }
-                // Add the new pole to words if it doesn't exist
-                if (!words?.some((w) => w.word === newPole)) {
-                  await addWord(newPole)
-                }
-              }}
-              onEditSouthPole={async (newPole) => {
-                const oldPole = settings.southPole
-                setSettings((prev) => ({ ...prev, southPole: newPole }))
-                // Remove the old pole from words if it exists
-                console.log(oldPole)
-                console.log(words)
-                if (oldPole && words?.some((w) => w.word === oldPole)) {
-                  setWords((prev) => {
-                    const oldWords = prev?.map((word) => word.word)
-                    console.log(oldWords)
-                    const newWords = prev
-                      ?.map((word) => word.word)
-                      ?.filter((w) => w !== oldPole)
-                    console.log(newWords)
-                    return prev
-                  })
-                }
-                // Add the new pole to words if it doesn't exist
-                if (!words?.some((w) => w.word === newPole)) {
-                  await addWord(newPole)
-                }
-              }}
-              wordInput={wordInput}
-              onWordInputChange={setWordInput}
-              onAddWord={handleAddWord}
-              onClearAll={clearAllWords}
-              onSaveWords={saveWords}
-              onExportWords={exportCurrentWords}
-              isLoading={isLoading}
-              onKeyPress={handleKeyPress}
-            />
+
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="bg-white rounded-lg shadow-sm">
+            <div
+              ref={axisRef}
+              className="relative h-[80vh] overflow-y-auto overflow-x-hidden"
+            >
+              <WordAxis
+                key={wordPositions?.length + "positions"}
+                words={wordPositions}
+                onRemoveWord={removeWord}
+                northPole={settings.northPole}
+                southPole={settings.southPole}
+                selectedService={settings.selectedService}
+                onEditNorthPole={async (newPole) => {
+                  const oldPole = settings.northPole
+                  setSettings((prev) => ({ ...prev, northPole: newPole }))
+                  // Remove the old pole from words if it exists
+                  if (oldPole && words?.some((w) => w.word === oldPole)) {
+                    const newWords = words.filter((w) => w.word !== oldPole)
+                    setWords(newWords)
+                  }
+                  // Add the new pole to words if it doesn't exist
+                  if (!words?.some((w) => w.word === newPole)) {
+                    await addWord(newPole)
+                  }
+                }}
+                onEditSouthPole={async (newPole) => {
+                  const oldPole = settings.southPole
+                  setSettings((prev) => ({ ...prev, southPole: newPole }))
+                  // Remove the old pole from words if it exists
+                  console.log(oldPole)
+                  console.log(words)
+                  if (oldPole && words?.some((w) => w.word === oldPole)) {
+                    setWords((prev) => {
+                      const oldWords = prev?.map((word) => word.word)
+                      console.log(oldWords)
+                      const newWords = prev
+                        ?.map((word) => word.word)
+                        ?.filter((w) => w !== oldPole)
+                      console.log(newWords)
+                      return prev
+                    })
+                  }
+                  // Add the new pole to words if it doesn't exist
+                  if (!words?.some((w) => w.word === newPole)) {
+                    await addWord(newPole)
+                  }
+                }}
+                wordInput={wordInput}
+                onWordInputChange={setWordInput}
+                onAddWord={handleAddWord}
+                onClearAll={clearAllWords}
+                onSaveWords={saveWords}
+                onExportWords={exportCurrentWords}
+                isLoading={isLoading}
+                onKeyPress={handleKeyPress}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
-          </DialogHeader>
+        <Dialog open={showSettings} onOpenChange={setShowSettings}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Settings</DialogTitle>
+            </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Embedding Service:
-              </label>
-              <select
-                value={tempSelectedService}
-                onChange={(e) => setTempSelectedService(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="mistral">Mistral AI (mistral-embed)</option>
-                <option value="openai">OpenAI (text-embedding-3-large)</option>
-                <option value="voyage">Voyage AI (voyage-3-large)</option>
-                <option value="google">Google (gemini-embedding-001)</option>
-                <option value="huggingface">
-                  Hugging Face (Qwen/Qwen3-Embedding-8B)
-                </option>
-              </select>
-            </div>
-
-            {tempSelectedService === "openai" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  OpenAI API key:
-                </label>
-                <input
-                  type="password"
-                  value={settings.openaiKey}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      openaiKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-            )}
-
-            {tempSelectedService === "voyage" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voyage API key:
-                </label>
-                <input
-                  type="password"
-                  value={settings.voyageKey}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      voyageKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-            )}
-
-            {tempSelectedService === "google" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Google API key:
-                </label>
-                <input
-                  type="password"
-                  value={settings.googleKey}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      googleKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-                <p className="mt-2 text-sm text-gray-600">
-                  Google is recommended as it ranks at the top of the{" "}
-                  <a
-                    href="https://huggingface.co/spaces/mteb/leaderboard"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-500"
-                  >
-                    MTEB leaderboard
-                  </a>
-                  . The API key is free with 1,000 daily usage allowance for the embedding model. You can obtain your API key{" "}
-                  <a
-                    href="https://aistudio.google.com/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-500"
-                  >
-                    here
-                  </a>
-                  .
-                </p>
-              </div>
-            )}
-
-            {tempSelectedService === "huggingface" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hugging Face API key:
-                </label>
-                <input
-                  type="password"
-                  value={settings.huggingFaceKey}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      huggingFaceKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-            )}
-
-            {tempSelectedService === "mistral" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mistral API key:
-                </label>
-                <input
-                  type="password"
-                  value={settings.mistralKey}
-                  onChange={(e) =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      mistralKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-end pt-4">
-              <button
-                onClick={() => {
+            <div className="space-y-4">
+              <ApiKeyInputs
+                selectedService={selectedServiceData.service}
+                settings={settings || {}}
+                onChange={(key, value) =>
                   setSettings((prev) => ({
                     ...prev,
-                    selectedService: tempSelectedService,
-                  }))
-                  setShowSettings(false)
-                }}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                Select
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showAbout} onOpenChange={setShowAbout}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>About</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <p className="text-gray-600">
-              This site is a vibe coded revamp of the original concept found
-              here:{" "}
-              <a
-                href="https://github.com/DefenderOfBasic/good-and-evil-concepts"
-                className="text-indigo-600 hover:text-indigo-500"
-              >
-                github.com/DefenderOfBasic/good-and-evil-concepts
-              </a>
-            </p>
-            <p className="text-gray-600">
-              Source code for this project:{" "}
-              <a
-                href="https://github.com/Mr-Ples/semantic-similarity-visualizer"
-                className="text-indigo-600 hover:text-indigo-500"
-              >
-                https://github.com/Mr-Ples/semantic-similarity-visualizer
-              </a>
-            </p>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog  open={showMyWords} onOpenChange={setShowMyWords}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader >
-            <div className="flex justify-between items-center">
-              <DialogTitle>Saved Word Lists</DialogTitle>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-3 py-1 mr-2 bg-blue-600 text-white text-sm rounded-md "
-              >
-                Import List
-              </button>
-            </div>
-          </DialogHeader>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            onChange={importWordList}
-            style={{ display: 'none' }}
-          />
-
-          <div className="space-y-4">
-            {(() => {
-              if (savedLists.length === 0) {
-                return (
-                  <p className="text-gray-500 text-center py-8">
-                    No saved word lists yet. Use the Save button to save your
-                    current word list.
-                  </p>
-                )
-              }
-
-              return savedLists.map((savedList: any) => (
-                <div
-                  key={savedList.id}
-                  className="border border-gray-200 rounded-lg p-4"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-medium text-gray-900">
-                        {savedList.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {new Date(savedList.timestamp).toLocaleString()}
-                      </p>
-                      <div className="flex flex-wrap gap-2 text-sm text-gray-600">
-                        <span className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full">
-                          {savedList.words.length} words
-                        </span>
-                        <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded-full">
-                          {savedList.northPole} ↔ {savedList.southPole}
-                        </span>
-                        <span className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-700 rounded-full">
-                          {savedList.words[0]?.model || "Unknown"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => loadSavedList(savedList)}
-                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      >
-                        Load
-                      </button>
-                      <button
-                        onClick={() => exportWordList(savedList)}
-                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
-                      >
-                        Export
-                      </button>
-                      <button
-                        onClick={() => deleteSavedList(savedList.id)}
-                        className="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <span className="font-medium">Words:</span>{" "}
-                    {savedList.words.map((w: any) => w.word).join(", ")}
-                  </div>
-                </div>
-              ))
-            })()}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  ) : (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="max-w-2xl w-full mx-auto p-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-semibold text-gray-900 mb-2">
-              Welcome to Semantic Similarity Visualizer
-            </h1>
-            <p className="text-gray-600">
-              Please configure your API key to get started
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Embedding Service:
-              </label>
-              <select
-                value={tempSettings.selectedService}
-                onChange={(e) => 
-                  setTempSettings((prev) => ({
-                    ...prev,
-                    selectedService: e.target.value,
+                    [key]: value,
                   }))
                 }
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="mistral">Mistral AI (mistral-embed)</option>
-                <option value="openai">OpenAI (text-embedding-3-large)</option>
-                <option value="voyage">Voyage AI (voyage-3-large)</option>
-                <option value="google">Google (gemini-embedding-001)</option>
-                <option value="huggingface">
-                  Hugging Face (Qwen/Qwen3-Embedding-8B)
-                </option>
-              </select>
+                onServiceChange={(service) => setTempSelectedService(service)}
+              />
+
+              <div className="flex justify-end pt-4">
+                <button
+                  onClick={() => {
+                    setSettings((prev) => ({
+                      ...prev,
+                      selectedService: tempSelectedService,
+                    }))
+                    setShowSettings(false)
+                  }}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Select
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showAbout} onOpenChange={setShowAbout}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>About</DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <p className="text-gray-600">
+                This site is a vibe coded revamp of the original concept found
+                here:{" "}
+                <a
+                  href="https://github.com/DefenderOfBasic/good-and-evil-concepts"
+                  className="text-indigo-600 hover:text-indigo-500"
+                >
+                  github.com/DefenderOfBasic/good-and-evil-concepts
+                </a>
+              </p>
+              <p className="text-gray-600">
+                Source code for this project:{" "}
+                <a
+                  href="https://github.com/Mr-Ples/semantic-similarity-visualizer"
+                  className="text-indigo-600 hover:text-indigo-500"
+                >
+                  https://github.com/Mr-Ples/semantic-similarity-visualizer
+                </a>
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showMyWords} onOpenChange={setShowMyWords}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex justify-between items-center">
+                <DialogTitle>Saved Word Lists</DialogTitle>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1 mr-2 bg-blue-600 text-white text-sm rounded-md "
+                >
+                  Import List
+                </button>
+              </div>
+            </DialogHeader>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={importWordList}
+              style={{ display: "none" }}
+            />
+
+            <div className="space-y-4">
+              {(() => {
+                if (savedLists.length === 0) {
+                  return (
+                    <p className="text-gray-500 text-center py-8">
+                      No saved word lists yet. Use the Save button to save your
+                      current word list.
+                    </p>
+                  )
+                }
+
+                return savedLists.map((savedList: any) => (
+                  <div
+                    key={savedList.id}
+                    className="border border-gray-200 rounded-lg p-4"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h3 className="font-medium text-gray-900">
+                          {savedList.name}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {new Date(savedList.timestamp).toLocaleString()}
+                        </p>
+                        <div className="flex flex-wrap gap-2 text-sm text-gray-600">
+                          <span className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full">
+                            {savedList.words.length} words
+                          </span>
+                          <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded-full">
+                            {savedList.northPole} ↔ {savedList.southPole}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-700 rounded-full">
+                            {savedList.words[0]?.model || "Unknown"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => loadSavedList(savedList)}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          Load
+                        </button>
+                        <button
+                          onClick={() => exportWordList(savedList)}
+                          className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                        >
+                          Export
+                        </button>
+                        <button
+                          onClick={() => deleteSavedList(savedList.id)}
+                          className="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <span className="font-medium">Words:</span>{" "}
+                      {savedList.words.map((w: any) => w.word).join(", ")}
+                    </div>
+                  </div>
+                ))
+              })()}
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    : <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-2xl w-full mx-auto p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div className="text-center mb-6">
+              <p className="text-gray-600">
+                Please configure your API key to get started
+              </p>
             </div>
 
-            {tempSettings.selectedService === "openai" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  OpenAI API key:
-                </label>
-                <input
-                  type="password"
-                  value={tempSettings.openaiKey}
-                  onChange={(e) =>
-                    setTempSettings((prev) => ({
-                      ...prev,
-                      openaiKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Enter your OpenAI API key"
-                />
-              </div>
-            )}
+            <div className="space-y-4">
+              <ApiKeyInputs
+                selectedService={tempSettings.selectedService}
+                settings={tempSettings}
+                onChange={(key, value) =>
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    [key]: value,
+                  }))
+                }
+                onServiceChange={(service) =>
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    selectedService: service,
+                  }))
+                }
+              />
 
-            {tempSettings.selectedService === "voyage" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voyage API key:
-                </label>
-                <input
-                  type="password"
-                  value={tempSettings.voyageKey}
-                  onChange={(e) =>
-                    setTempSettings((prev) => ({
-                      ...prev,
-                      voyageKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Enter your Voyage API key"
-                />
-              </div>
-            )}
-
-            {tempSettings.selectedService === "google" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Google API key:
-                </label>
-                <input
-                  type="password"
-                  value={tempSettings.googleKey}
-                  onChange={(e) =>
-                    setTempSettings((prev) => ({
-                      ...prev,
-                      googleKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Enter your Google API key"
-                />
-                <p className="mt-2 text-sm text-gray-600">
-                  gemini-embedding-001 ranks at the top of the{" "}
-                  <a
-                    href="https://huggingface.co/spaces/mteb/leaderboard"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-500"
-                  >
-                    MTEB leaderboard
-                  </a>
-                  . Get a free API key{" "}
-                  <a
-                    href="https://aistudio.google.com/apikey"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-indigo-600 hover:text-indigo-500"
-                  >
-                    here
-                  </a>.
-                </p>
-              </div>
-            )}
-
-            {tempSettings.selectedService === "huggingface" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hugging Face API key:
-                </label>
-                <input
-                  type="password"
-                  value={tempSettings.huggingFaceKey}
-                  onChange={(e) =>
-                    setTempSettings((prev) => ({
-                      ...prev,
-                      huggingFaceKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Enter your Hugging Face API key"
-                />
-              </div>
-            )}
-
-            {tempSettings.selectedService === "mistral" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Mistral API key:
-                </label>
-                <input
-                  type="password"
-                  value={tempSettings.mistralKey}
-                  onChange={(e) =>
-                    setTempSettings((prev) => ({
-                      ...prev,
-                      mistralKey: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  placeholder="Enter your Mistral API key"
-                />
-              </div>
-            )}
-
-            <div className="flex justify-center pt-4">
-              <button
-                onClick={() => {
-                  if (hasValidTempApiKey()) {
-                    // console.log(tempSettings)
-                    // console.log(settings)
-                    setSettings(tempSettings);
-                  }
-                }}
-                disabled={!hasValidTempApiKey()}
-                className={`px-6 py-2 rounded-md font-medium ${
-                  hasValidTempApiKey()
-                    ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              <div className="flex justify-center pt-4">
+                <button
+                  onClick={() => {
+                    if (hasValidTempApiKey()) {
+                      // console.log(tempSettings)
+                      // console.log(settings)
+                      setSettings(tempSettings)
+                    }
+                  }}
+                  disabled={!hasValidTempApiKey()}
+                  className={`px-6 py-2 rounded-md font-medium ${
+                    hasValidTempApiKey() ?
+                      "bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                Get Started
-              </button>
+                  }`}
+                >
+                  Get Started
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  )
 }
