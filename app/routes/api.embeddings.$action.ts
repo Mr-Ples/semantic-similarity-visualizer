@@ -6,7 +6,7 @@ export enum EmbeddingAction {
   GET_EMBEDDING = "getEmbedding",
 }
 
-export async function action({ request, params }: ActionFunctionArgs) {
+export async function clientAction({ request, params }: ActionFunctionArgs) {
   const formData = await request.formData()
   switch (params.action) {
     case EmbeddingAction.GET_EMBEDDING:
