@@ -1,34 +1,23 @@
-import type { AppLoadContext } from "react-router"
-import { type WordData } from "./embeddings.utils"
-import { MODELS, Services } from "./constants"
+import { EmbeddingModels, MODELS, Services } from "./constants"
 
-export interface EmbeddingSettings {
-  model: string
-  openaiKey: string
-  voyageKey: string
-  googleKey: string
-  huggingFaceKey: string
-  mistralKey: string
-  northPole: string
-  southPole: string
-}
-
-export async function embedWord(
-  word: string,
-  settings: EmbeddingSettings,
-): Promise<{ embedding: number[]; model: string }> {
-  const { model: service, openaiKey, voyageKey, googleKey, huggingFaceKey, mistralKey } =
-    settings
-
-  const model = MODELS.find((model) => model.service === service)?.model;
-  if (!model) {
+export async function getWordEmbedding({
+  word,
+  model,
+  key,
+}: {
+  word: string
+  model: EmbeddingModels
+  key: string
+}): Promise<{ embedding: number[]; model: string }> {
+  const service = MODELS.find((modelData) => modelData.model === model)?.service
+  if (!service) {
     throw new Error(`No valid model for ${service}`)
   }
 
   // Use the selected service to determine which API to use
-  if (service === Services.GOOGLE && googleKey !== "") {
+  if (service === Services.GOOGLE) {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${googleKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${key}`,
       {
         method: "POST",
         headers: {
@@ -47,7 +36,7 @@ export async function embedWord(
       }
     )
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       error?: string
       embedding?: { values: number[] }
     }
@@ -61,11 +50,11 @@ export async function embedWord(
   }
 
   // TODO test
-  if (service === Services.VOYAGE && voyageKey !== "") {
+  if (service === Services.VOYAGE) {
     const response = await fetch("https://api.voyageai.com/v1/embeddings", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer " + voyageKey,
+        "Authorization": "Bearer " + key,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -75,7 +64,7 @@ export async function embedWord(
       }),
     })
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       error?: string
       data?: { embedding: number[] }[]
     }
@@ -87,11 +76,11 @@ export async function embedWord(
   }
 
   // TODO test
-  if (service === Services.OPENAI && openaiKey !== "") {
+  if (service === Services.OPENAI) {
     const response = await fetch("https://api.openai.com/v1/embeddings", {
       method: "POST",
       headers: {
-        "Authorization": "Bearer " + openaiKey,
+        "Authorization": "Bearer " + key,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -101,7 +90,7 @@ export async function embedWord(
       }),
     })
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       error?: string
       data?: { embedding: number[] }[]
     }
@@ -115,8 +104,7 @@ export async function embedWord(
     return { embedding: data.data[0].embedding, model: model }
   }
 
-  if (service === Services.MISTRAL && mistralKey !== "" ) {
-    const key = mistralKey
+  if (service === Services.MISTRAL) {
     const response = await fetch("https://api.mistral.ai/v1/embeddings", {
       method: "POST",
       headers: {
@@ -129,7 +117,7 @@ export async function embedWord(
       }),
     })
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       error?: string
       data?: { embedding: number[] }[]
     }
@@ -142,13 +130,13 @@ export async function embedWord(
     return { embedding: data?.data?.[0]?.embedding, model: model }
   }
 
-  if (service === Services.HUGGINGFACE && huggingFaceKey !== "") {
+  if (service === Services.HUGGINGFACE) {
     const response = await fetch(
       "https://router.huggingface.co/nebius/v1/embeddings",
       {
         method: "POST",
         headers: {
-          "Authorization": "Bearer " + huggingFaceKey,
+          "Authorization": "Bearer " + key,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -158,7 +146,7 @@ export async function embedWord(
       }
     )
 
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       error?: string
       detail?: string
       data?: { embedding: number[] }[]
@@ -179,16 +167,4 @@ export async function embedWord(
   throw new Error(
     `No valid API key provided for ${model}. Please add the appropriate API key in the settings.`
   )
-}
-
-export async function getWordEmbedding(
-  word: string,
-  settings: EmbeddingSettings,
-  context: AppLoadContext
-): Promise<WordData> {
-  const result = await embedWord(word, settings)
-  if (!Array.isArray(result.embedding)) {
-    throw new Error("Embedding must be an array")
-  }
-  return { word, embedding: result.embedding, model: result.model }
 }

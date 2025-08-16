@@ -13,26 +13,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog"
-import type { WordPosition } from "~/lib/embeddings.client"
-import { MODELS } from "~/lib/constants"
-
-interface WordAxisProps {
-  words: WordPosition[]
-  northPole: string
-  southPole: string
-  selectedService: string
-  onRemoveWord: (word: string) => void
-  onEditNorthPole: (value: string) => void
-  onEditSouthPole: (value: string) => void
-  wordInput: string
-  onWordInputChange: (value: string) => void
-  onAddWord: () => void
-  onClearAll: () => void
-  onSaveWords: (customName?: string, replaceId?: string | null) => void
-  onExportWords: () => void
-  isLoading: boolean
-  onKeyPress: (e: React.KeyboardEvent) => void
-}
+import {
+  EmbeddingModels,
+  modelColors,
+  MODELS,
+  Pole,
+  type PoleWordData,
+  type Settings,
+  type WordData,
+} from "~/lib/constants"
+import { calculateAllWordPositions } from "~/lib/embeddings.utils"
+import { toast } from "sonner"
 
 interface PolePopupProps {
   isOpen: boolean
@@ -47,9 +38,8 @@ interface PolePopupProps {
 
 export function WordAxis({
   words,
-  northPole,
-  southPole,
-  selectedService,
+  settings,
+
   onRemoveWord,
   onEditNorthPole,
   onEditSouthPole,
@@ -61,39 +51,81 @@ export function WordAxis({
   onExportWords,
   isLoading,
   onKeyPress,
-}: WordAxisProps) {
-  const [showNorthPolePopup, setShowNorthPolePopup] = useState(false)
-  const [showSouthPolePopup, setShowSouthPolePopup] = useState(false)
+  setSettings,
+  onShowSettings,
+  onClearWordsForModel,
+  onClearPolesForModel,
+  fetchEmbeddingsForNewModel,
+
+  poles,
+}: {
+  words: WordData[]
+  settings: Settings
+
+  onRemoveWord: (word: string) => void
+  onEditNorthPole: (value: string) => void
+  onEditSouthPole: (value: string) => void
+  wordInput: string
+  onWordInputChange: (value: string) => void
+  onAddWord: () => void
+  onClearAll: () => void
+  onSaveWords: (customName?: string, replaceId?: string | null) => void
+  onExportWords: () => void
+  isLoading: boolean
+  onKeyPress: (e: React.KeyboardEvent) => void
+  setSettings: any
+  onShowSettings: () => void
+  onClearWordsForModel: (model: string) => void
+  onClearPolesForModel: (model: string) => void
+  fetchEmbeddingsForNewModel: (model: string) => Promise<void>
+
+  poles: PoleWordData[]
+}) {
+  const [showPolePopup, setShowPolePopup] = useState<"left" | "right" | null>(
+    null
+  )
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState("")
   const [selectedListId, setSelectedListId] = useState<string | null>(null)
-  const [tempNorthPole, setTempNorthPole] = useState(northPole)
-  const [tempSouthPole, setTempSouthPole] = useState(southPole)
+  const [tempPoles, setTempPoles] = useState(poles)
+  const [showModelRemovalConfirmation, setShowModelRemovalConfirmation] =
+    useState(false)
+  const [modelToRemove, setModelToRemove] = useState<string | null>(null)
+  const [hoveredModel, setHoveredModel] = useState<string | null>(null)
 
   useEffect(() => {
-    setTempNorthPole(northPole)
-    setTempSouthPole(southPole)
-  }, [northPole, southPole])
+    setTempPoles(poles)
+  }, [poles])
 
-  const handleNorthPoleSave = () => {
-    onEditNorthPole(tempNorthPole)
-    setShowNorthPolePopup(false)
+  const selectedModels = settings?.selectedModels || []
+
+  const handlePoleSave = () => {
+    if (!selectedModels.length) {
+      toast.info("Add a model first")
+      return
+    }
+
+    // Find what changed and call appropriate parent function
+    const leftPole = tempPoles.find((p) => p.pole === Pole.LEFT)
+    const rightPole = tempPoles.find((p) => p.pole === Pole.RIGHT)
+    const originalLeft = poles.find((p) => p.pole === Pole.LEFT)
+    const originalRight = poles.find((p) => p.pole === Pole.RIGHT)
+
+    if (leftPole && leftPole.word !== originalLeft?.word) {
+      onEditSouthPole(leftPole.word)
+    }
+
+    if (rightPole && rightPole.word !== originalRight?.word) {
+      onEditNorthPole(rightPole.word)
+    }
+
+    setShowPolePopup(null)
   }
 
-  const handleSouthPoleSave = () => {
-    onEditSouthPole(tempSouthPole)
-    setShowSouthPolePopup(false)
-  }
-
-  const handleNorthPoleCancel = () => {
-    setTempNorthPole(northPole)
-    setShowNorthPolePopup(false)
-  }
-
-  const handleSouthPoleCancel = () => {
-    setTempSouthPole(southPole)
-    setShowSouthPolePopup(false)
+  const handlePoleCancel = () => {
+    setTempPoles(poles)
+    setShowPolePopup(null)
   }
 
   const handleClearConfirm = () => {
@@ -103,6 +135,36 @@ export function WordAxis({
 
   const handleClearCancel = () => {
     setShowClearConfirmation(false)
+  }
+
+  const handleModelRemovalClick = (model: string) => {
+    setModelToRemove(model)
+    setShowModelRemovalConfirmation(true)
+  }
+
+  const handleModelRemovalConfirm = () => {
+    if (modelToRemove) {
+      // Clear words and poles for this model
+      onClearWordsForModel(modelToRemove)
+      onClearPolesForModel(modelToRemove)
+
+      // Remove the model from selected models
+      setSettings((prev: Settings) => {
+        return {
+          ...prev,
+          selectedModels: prev.selectedModels.filter(
+            (m) => m !== modelToRemove
+          ),
+        }
+      })
+    }
+    setShowModelRemovalConfirmation(false)
+    setModelToRemove(null)
+  }
+
+  const handleModelRemovalCancel = () => {
+    setShowModelRemovalConfirmation(false)
+    setModelToRemove(null)
   }
 
   const handleSaveClick = () => {
@@ -126,43 +188,117 @@ export function WordAxis({
 
   // Calculate positions for visualization
   const positionedWords = useMemo(() => {
-    if (!words || words.length === 0) return []
+    if (!words || words.length === 0) {
+      return []
+    }
 
-    const positions = words.map(
-      (d) => d.northDistance / (d.southDistance + d.northDistance)
-    )
-    const minPos = Math.min(...positions)
-    const maxPos = Math.max(...positions)
+    // Find pole data from the poles array
+    const leftPoleData = poles.find((p) => p.pole === Pole.LEFT)
+    const rightPoleData = poles.find((p) => p.pole === Pole.RIGHT)
 
-    const wordPositions = words.map((wordData) => {
-      const rawPosition =
-        wordData.northDistance /
-        (wordData.southDistance + wordData.northDistance)
-      const normalizedPosition =
-        ((rawPosition - minPos) / (maxPos - minPos)) * 100
+    if (!leftPoleData || !rightPoleData) {
+      return []
+    }
 
-      // Debug logging
-      console.log(
-        `${wordData.word}: north=${wordData.northDistance.toFixed(3)}, south=${wordData.southDistance.toFixed(3)}, raw=${rawPosition.toFixed(3)}, norm=${normalizedPosition.toFixed(1)}`
+    // Calculate positions for each selected model separately
+    const allModelPositions = []
+
+    for (const selectedModel of selectedModels) {
+      if (!leftPoleData.embeddings || !rightPoleData.embeddings) continue
+
+      const leftEmbedding = (leftPoleData.embeddings as any)[selectedModel]
+      const rightEmbedding = (rightPoleData.embeddings as any)[selectedModel]
+
+      if (
+        !leftEmbedding ||
+        !rightEmbedding ||
+        leftEmbedding.length === 0 ||
+        rightEmbedding.length === 0
+      ) {
+        continue
+      }
+
+      // Filter words to only include those from this specific model
+      const wordsForThisModel = words.filter(
+        (word) =>
+          word.model === selectedModel &&
+          word.embedding &&
+          word.embedding.length > 0
       )
 
-      return {
-        word: wordData.word,
-        northDistance: wordData.northDistance,
-        southDistance: wordData.southDistance,
-        position: normalizedPosition,
-        verticalOffset: 0,
+      if (wordsForThisModel.length === 0) {
+        continue
       }
-    })
 
-    // Sort by position to check for overlaps
-    wordPositions.sort((a, b) => a.position - b.position)
+      // Create WordData objects for the poles so they can be included in calculations
+      const leftPoleWordData: WordData = {
+        word: leftPoleData.word,
+        embedding: leftEmbedding,
+        model: selectedModel as EmbeddingModels,
+      }
+      const rightPoleWordData: WordData = {
+        word: rightPoleData.word,
+        embedding: rightEmbedding,
+        model: selectedModel as EmbeddingModels,
+      }
+
+      // Include poles in the calculation to get proper min/max range
+      const allWordsIncludingPoles = [
+        ...wordsForThisModel,
+        leftPoleWordData,
+        rightPoleWordData,
+      ]
+
+      const allWordPositions = calculateAllWordPositions(
+        allWordsIncludingPoles,
+        leftEmbedding,
+        rightEmbedding
+      )
+
+      const allPositions = allWordPositions.map(
+        (d) => d.northDistance / (d.southDistance + d.northDistance)
+      )
+      const minPos = Math.min(...allPositions)
+      const maxPos = Math.max(...allPositions)
+
+      // Filter out the pole words for display (we only want regular words positioned)
+      const wordPositions = allWordPositions.filter(
+        (wp) =>
+          wp.wordData.word !== leftPoleData.word &&
+          wp.wordData.word !== rightPoleData.word
+      )
+
+      const modelWordPositions = wordPositions.map((wordPosition) => {
+        const rawPosition =
+          wordPosition.northDistance /
+          (wordPosition.southDistance + wordPosition.northDistance)
+        const normalizedPosition =
+          ((rawPosition - minPos) / (maxPos - minPos)) * 100
+
+        // Debug logging
+        console.log(
+          `${wordPosition.wordData.word} (${selectedModel}): north=${wordPosition.northDistance.toFixed(3)}, south=${wordPosition.southDistance.toFixed(3)}, raw=${rawPosition.toFixed(3)}, norm=${normalizedPosition.toFixed(1)}`
+        )
+
+        return {
+          wordData: wordPosition.wordData,
+          position: normalizedPosition,
+          verticalOffset: 0,
+        }
+      })
+
+      // Add these positions to the accumulated results
+      allModelPositions.push(...modelWordPositions)
+    }
+
+    // Sort all positions by position to check for overlaps
+    allModelPositions.sort((a, b) => a.position - b.position)
 
     // Group overlapping words and assign vertical positions
     const overlapGroups = []
 
-    for (let i = 0; i < wordPositions.length; i++) {
-      const currentWord = wordPositions[i]
+    for (let i = 0; i < allModelPositions.length; i++) {
+      const currentWord = allModelPositions[i]
       let addedToGroup = false
 
       // Try to add to existing group
@@ -206,8 +342,8 @@ export function WordAxis({
       }
     }
 
-    return wordPositions
-  }, [words])
+    return allModelPositions
+  }, [words, poles])
 
   function PolePopup({
     isOpen,
@@ -277,7 +413,7 @@ export function WordAxis({
   }
 
   return (
-    <div className="bg-white h-full rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="bg-white h-full max-md:p-0 rounded-lg shadow-sm border border-gray-200 p-6">
       {/* Loading spinner in top right */}
       {isLoading && (
         <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white px-3 py-2 rounded-md shadow-md border border-gray-200">
@@ -290,62 +426,169 @@ export function WordAxis({
 
       {/* Small input in top right */}
       <div className="absolute top-4 right-4 z-20">
-        <div className="flex gap-2 items-center">
-          <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-full border border-blue-200">
-            {MODELS.find((model) => model.service === selectedService)?.model}
-          </span>
-          <input
-            type="text"
-            value={wordInput}
-            onChange={(e) => onWordInputChange(e.target.value)}
-            onKeyPress={onKeyPress}
-            placeholder="Enter a word"
-            className="w-32 px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          />
-          <button
-            onClick={onAddWord}
-            disabled={
-              isLoading ||
-              (wordInput.trim() &&
-                words?.some((w) => w.word === wordInput.trim()))
-            }
-            className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Add
-          </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="px-2 cursor-pointer py-1 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
+        <div className="flex flex-wrap-reverse gap-2 items-center">
+          {/* Selected model tags */}
+          <div className="flex ml-auto flex-wrap justify-end gap-1 items-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="inline-flex ml-auto items-center px-2 py-1 bg-gray-50 text-gray-700 text-xs font-medium rounded-full border border-gray-200 hover:bg-gray-100 transition-colors">
+                  + Model
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {Object.entries(settings.keys)
+                  .filter(([_, key]) => key)
+                  .map(([service, _]) => {
+                    const model = MODELS.find(
+                      (model) => model.service === service
+                    )?.model
+                    if (!model) {
+                      return null
+                    }
+                    return (
+                      <DropdownMenuItem
+                        className="text-gray-500 hover:text-gray-700 text-sm"
+                        key={service}
+                        disabled={selectedModels.includes(model)}
+                        onClick={async () => {
+                          setSettings((prev: Settings) => {
+                            return {
+                              ...prev,
+                              selectedModels: [...prev.selectedModels, model],
+                            }
+                          })
+
+                          // Fetch embeddings for pole words and regular words for the new model
+                          await fetchEmbeddingsForNewModel(model)
+                        }}
+                      >
+                        {model}
+                      </DropdownMenuItem>
+                    )
+                  })}
+                <DropdownMenuItem
+                  className="text-gray-500 hover:text-gray-700 text-sm"
+                  onClick={onShowSettings}
                 >
-                  <circle cx="12" cy="6" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="12" cy="18" r="2" />
-                </svg>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem
-                onClick={handleSaveClick}
-                disabled={isLoading || !words || words.length === 0}
-              >
-                Save All
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={onExportWords}
-                disabled={isLoading || !words || words.length === 0}
-              >
-                Export
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setShowClearConfirmation(true)}>
-                Clear All
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  + Add Model
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {selectedModels.map((model) => {
+              const service = MODELS.find(
+                (modelData) => modelData.model === model
+              )?.service
+              const color = service ? modelColors[service] : undefined
+              return (
+                <button
+                  key={model}
+                  onMouseEnter={() => setHoveredModel(model)}
+                  onMouseLeave={() => setHoveredModel(null)}
+                  className={`inline-flex cursor-pointer items-center px-2 py-1 text-xs font-medium rounded-full border transition-all hover:opacity-75 ${(service && modelColors[service]) || "bg-gray-50 text-gray-700 border-gray-200"}`}
+                >
+                  {model}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      handleModelRemovalClick(model)
+                    }}
+                  >
+                    <svg
+                      className="ml-1 h-3 w-3"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex ml-auto flex-row flex-wrap gap-1 items-center">
+            <input
+              type="text"
+              value={wordInput}
+              onChange={(e) => onWordInputChange(e.target.value)}
+              onKeyPress={onKeyPress}
+              placeholder="Enter a word"
+              className="w-32 px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <button
+              onClick={() => {
+                if (!settings?.selectedModels?.length) {
+                  toast.info("Add a model")
+                  return
+                }
+                // Check if API keys exist for all selected models
+                const missingKeys = settings.selectedModels.filter(modelName => {
+                  const modelData = MODELS.find(m => m.model === modelName)
+                  if (!modelData) return true
+                  return !settings?.keys?.[modelData.service]
+                })
+                if (missingKeys.length > 0) {
+                  toast.info("Please add API keys for selected models")
+                  return
+                }
+                if (isLoading) {
+                  toast.info("Please wait for the current request to finish")
+                  return
+                }
+                if (wordInput.trim() === "") {
+                  toast.info("Please enter a word")
+                  return
+                }
+                if (words?.some((w: any) => w.word === wordInput.trim())) {
+                  toast.info("Word already exists")
+                  return
+                }
+                onAddWord()
+              }}
+              className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Add
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="px-2 cursor-pointer py-1.5 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <circle cx="12" cy="6" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="12" cy="18" r="2" />
+                  </svg>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  onClick={handleSaveClick}
+                  disabled={isLoading || !words || words.length === 0}
+                >
+                  Save All
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={onExportWords}
+                  disabled={isLoading || !words || words.length === 0}
+                >
+                  Export
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowClearConfirmation(true)}
+                >
+                  Clear All
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
@@ -407,7 +650,7 @@ export function WordAxis({
               const savedLists = JSON.parse(
                 localStorage.getItem("savedWordLists") || "[]"
               )
-              if (savedLists.length === 0) return null
+              if (!savedLists?.length) return null
 
               return (
                 <div>
@@ -460,66 +703,98 @@ export function WordAxis({
         {/* South Pole Label */}
         <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
           <div
-            onClick={() => setShowSouthPolePopup(true)}
+            onClick={() => setShowPolePopup("left")}
             className="px-4 py-2 bg-red-100 text-red-800 rounded-md text-sm font-medium shadow-sm cursor-pointer hover:bg-red-200 transition-colors"
           >
-            {southPole}
+            {poles.find((p) => p.pole === Pole.LEFT)?.word || ""}
           </div>
 
-          <PolePopup
-            isOpen={showSouthPolePopup}
-            value={tempSouthPole}
-            onChange={setTempSouthPole}
-            onSave={handleSouthPoleSave}
-            onCancel={handleSouthPoleCancel}
-            placeholder="Enter south pole word"
-            focusColor="red"
-            position="left"
-          />
+          {showPolePopup === "left" && (
+            <PolePopup
+              isOpen={true}
+              value={tempPoles.find((p) => p.pole === Pole.LEFT)?.word || ""}
+              onChange={(value) =>
+                setTempPoles((prev) =>
+                  prev.map((p) =>
+                    p.pole === Pole.LEFT ? { ...p, word: value } : p
+                  )
+                )
+              }
+              onSave={handlePoleSave}
+              onCancel={handlePoleCancel}
+              placeholder="Enter south pole word"
+              focusColor="red"
+              position="left"
+            />
+          )}
         </div>
 
         {/* North Pole Label */}
         <div className="absolute right-0 top-1/2 transform -translate-y-1/2">
           <div
-            onClick={() => setShowNorthPolePopup(true)}
+            onClick={() => setShowPolePopup("right")}
             className="px-4 py-2 bg-green-100 text-green-800 rounded-md text-sm font-medium shadow-sm cursor-pointer hover:bg-green-200 transition-colors"
           >
-            {northPole}
+            {poles.find((p) => p.pole === Pole.RIGHT)?.word || ""}
           </div>
 
-          <PolePopup
-            isOpen={showNorthPolePopup}
-            value={tempNorthPole}
-            onChange={setTempNorthPole}
-            onSave={handleNorthPoleSave}
-            onCancel={handleNorthPoleCancel}
-            placeholder="Enter north pole word"
-            focusColor="green"
-            position="right"
-          />
+          {showPolePopup === "right" && (
+            <PolePopup
+              isOpen={true}
+              value={tempPoles.find((p) => p.pole === Pole.RIGHT)?.word || ""}
+              onChange={(value) =>
+                setTempPoles((prev) =>
+                  prev.map((p) =>
+                    p.pole === Pole.RIGHT ? { ...p, word: value } : p
+                  )
+                )
+              }
+              onSave={handlePoleSave}
+              onCancel={handlePoleCancel}
+              placeholder="Enter north pole word"
+              focusColor="green"
+              position="right"
+            />
+          )}
         </div>
 
         {/* Words positioned along the axis */}
-        {positionedWords.map((wordData) => {
-          const isNorthPole = wordData.word === northPole
-          const isSouthPole = wordData.word === southPole
-          const isPole = isNorthPole || isSouthPole
+        {positionedWords.map(({ wordData, position, verticalOffset }) => {
+          // Find the corresponding word to get model info
+          const wordInfo = words.find((w: any) => w.word === wordData.word)
+          const modelService = MODELS.find(
+            (m: any) => m.model === wordData.model
+          )?.service
+
+          const wordModelColors: Record<string, string> = {
+            google: "bg-blue-100 text-blue-800 border-blue-300",
+            openai: "bg-green-100 text-green-800 border-green-300",
+            voyage: "bg-purple-100 text-purple-800 border-purple-300",
+            mistral: "bg-orange-100 text-orange-800 border-orange-300",
+            huggingface: "bg-yellow-100 text-yellow-800 border-yellow-300",
+          }
+
+          const colorClass =
+            (modelService && wordModelColors[modelService]) ||
+            "bg-gray-100 text-gray-800 border-gray-300"
+
+          // Determine opacity based on hover state
+          const isHovered = hoveredModel === wordData.model
+          const shouldReduceOpacity = hoveredModel && !isHovered
+          const opacityClass =
+            shouldReduceOpacity ? "opacity-40" : "opacity-100"
 
           return (
             <div
-              key={wordData.word}
+              key={wordData.word + wordData.model}
               onClick={(e) => {
                 e.stopPropagation()
                 onRemoveWord(wordData.word)
               }}
-              className={`absolute px-4 py-2 rounded-md text-sm font-medium shadow-sm transform -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-colors duration-200 z-20 ${
-                isPole ? "hidden" : (
-                  "bg-gray-100 hover:bg-gray-200 text-gray-800"
-                )
-              }`}
+              className={`absolute px-2 max-md:text-[10px] text-xs py-1 rounded-md font-medium shadow-sm transform -translate-x-1/2 -translate-y-1/2 cursor-pointer duration-200 z-20 border ${colorClass} ${opacityClass} hover:opacity-75`}
               style={{
-                left: `${6 + (wordData.position / 100) * 88}%`,
-                top: `calc(50% - 20px + ${wordData.verticalOffset}px)`,
+                left: `${6 + (position / 100) * 88}%`,
+                top: `calc(50% - 20px + ${verticalOffset}px)`,
               }}
             >
               {wordData.word}
@@ -527,6 +802,36 @@ export function WordAxis({
           )
         })}
       </div>
+
+      {/* Model Removal Confirmation Dialog */}
+      <Dialog
+        open={showModelRemovalConfirmation}
+        onOpenChange={setShowModelRemovalConfirmation}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Model</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to remove {modelToRemove}? This will remove
+              all words and embeddings for this model from the graph.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              onClick={handleModelRemovalCancel}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleModelRemovalConfirm}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Remove Model
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -132,3 +132,24 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+
+
+/* Custom scrollbar: only a thin blue line, no thumb or track */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #565B76 transparent; /* blue-600, adjust as needed */
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  display: none;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  display: none;
+}

@@ -1,3 +1,5 @@
+import type { WordData } from "./constants";
+
 // Calculate dot product of two vectors
 export const dotProduct = (vecA: number[], vecB: number[]): number => {
   if (vecA.length !== vecB.length) {
@@ -28,7 +30,33 @@ export const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
   return dot / (magA * magB);
 };
 
-export interface WordData {
-  word: string;
-  embedding: number[];
+export interface WordPosition {
+  wordData: WordData;
+  southDistance: number;
+  northDistance: number;
+}
+
+function calculateWordPosition(
+  wordData: WordData,
+  southPoleEmbedding: number[],
+  northPoleEmbedding: number[]
+): WordPosition {
+  const southDistance = cosineSimilarity(wordData.embedding, southPoleEmbedding);
+  const northDistance = cosineSimilarity(wordData.embedding, northPoleEmbedding);
+  
+  return { 
+    wordData, 
+    southDistance, 
+    northDistance 
+  };
+}
+
+export function calculateAllWordPositions(
+  words: WordData[],
+  southPoleEmbedding: number[],
+  northPoleEmbedding: number[]
+): WordPosition[] {
+  return words
+    .filter(wordData => wordData.embedding && wordData.embedding.length > 0)
+    .map(wordData => calculateWordPosition(wordData, southPoleEmbedding, northPoleEmbedding));
 }
