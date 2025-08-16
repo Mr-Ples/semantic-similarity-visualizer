@@ -27,6 +27,7 @@ interface WordAxisProps {
   onAddWord: () => void
   onClearAll: () => void
   onSaveWords: (customName?: string, replaceId?: string | null) => void
+  onExportWords: () => void
   isLoading: boolean
   onKeyPress: (e: React.KeyboardEvent) => void
 }
@@ -54,6 +55,7 @@ export function WordAxis({
   onAddWord,
   onClearAll,
   onSaveWords,
+  onExportWords,
   isLoading,
   onKeyPress,
 }: WordAxisProps) {
@@ -324,6 +326,12 @@ export function WordAxis({
                 disabled={isLoading || !words || words.length === 0}
               >
                 Save All
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onExportWords}
+                disabled={isLoading || !words || words.length === 0}
+              >
+                Export
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setShowClearConfirmation(true)}>
                 Clear All

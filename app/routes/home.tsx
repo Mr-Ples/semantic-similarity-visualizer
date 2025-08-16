@@ -148,6 +148,12 @@ function UI({ loaderData }: Route.ComponentProps) {
     return <div>Loading...</div>
   }
 
+  // Check if API key is configured for selected service
+  const hasValidApiKey = () => {
+    return settings.mistralKey.trim() !== "" || settings.openaiKey.trim() !== "" || settings.voyageKey.trim() !== "" || settings.googleKey.trim() !== "" || settings.huggingFaceKey.trim() !== ""
+  }
+  const [tempSettings, setTempSettings] = useState(settings);
+ 
   const { value: words, set: setWords } = useLocalStorageValue<WordData[]>(
     "words",
     {
@@ -175,6 +181,7 @@ function UI({ loaderData }: Route.ComponentProps) {
   const [savedLists, setSavedLists] = useState<any[]>([])
   const axisRef = useRef<HTMLDivElement>(null)
   const previousModelRef = useRef<string>("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     // Load pole embeddings if we don't have them or if poles changed
@@ -551,6 +558,77 @@ function UI({ loaderData }: Route.ComponentProps) {
     setSavedLists(filteredLists)
   }
 
+  const exportWordList = (savedList: any) => {
+    const dataStr = JSON.stringify(savedList, null, 2)
+    const dataBlob = new Blob([dataStr], { type: 'application/json' })
+    const url = URL.createObjectURL(dataBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${savedList.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  const exportCurrentWords = () => {
+    if (!words || words.length === 0) return
+
+    const timestamp = new Date().toISOString()
+    const currentList = {
+      id: timestamp,
+      name: `Word List ${timestamp}`,
+      timestamp: timestamp,
+      words: words,
+      poleEmbeddings: poleEmbeddings,
+      northPole: settings.northPole,
+      southPole: settings.southPole,
+    }
+
+    exportWordList(currentList)
+  }
+
+  const importWordList = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const importedList = JSON.parse(e.target?.result as string)
+        
+        // Validate the imported data structure
+        if (!importedList.words || !Array.isArray(importedList.words)) {
+          setError("Invalid file format: missing words array")
+          return
+        }
+
+        // Generate new ID and timestamp for imported list
+        const timestamp = new Date().toISOString()
+        const listToImport = {
+          ...importedList,
+          id: timestamp,
+          timestamp: timestamp,
+          name: importedList.name ? `${importedList.name} (Imported)` : `Imported List`
+        }
+
+        const currentLists = JSON.parse(
+          localStorage.getItem("savedWordLists") || "[]"
+        )
+        const newLists = [...currentLists, listToImport]
+        localStorage.setItem("savedWordLists", JSON.stringify(newLists))
+        setSavedLists(newLists)
+        setError(null)
+      } catch (error) {
+        setError("Failed to parse imported file")
+      }
+    }
+    reader.readAsText(file)
+    
+    // Reset the input
+    event.target.value = ''
+  }
+
   const resetSettings = () => {
     const defaultSettings: Settings = {
       selectedService: "mistral",
@@ -564,8 +642,21 @@ function UI({ loaderData }: Route.ComponentProps) {
     }
     setSettings(defaultSettings)
   }
-
-  return (
+  const hasValidTempApiKey = () => {
+    if (tempSettings.selectedService === "openai") {
+      return tempSettings.openaiKey.trim() !== "";
+    } else if (tempSettings.selectedService === "voyage") {
+      return tempSettings.voyageKey.trim() !== "";
+    } else if (tempSettings.selectedService === "google") {
+      return tempSettings.googleKey.trim() !== "";
+    } else if (tempSettings.selectedService === "huggingface") {
+      return tempSettings.huggingFaceKey.trim() !== "";
+    } else if (tempSettings.selectedService === "mistral") {
+      return tempSettings.mistralKey.trim() !== "";
+    }
+    return false;
+  };
+  return hasValidApiKey() ? (
     <div className="min-h-screen bg-gray-50">
       {/* Top Bar */}
       <div className="bg-white shadow-sm border-b border-gray-200">
@@ -720,6 +811,7 @@ function UI({ loaderData }: Route.ComponentProps) {
               onAddWord={handleAddWord}
               onClearAll={clearAllWords}
               onSaveWords={saveWords}
+              onExportWords={exportCurrentWords}
               isLoading={isLoading}
               onKeyPress={handleKeyPress}
             />
@@ -807,6 +899,27 @@ function UI({ loaderData }: Route.ComponentProps) {
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 />
+                <p className="mt-2 text-sm text-gray-600">
+                  Google is recommended as it ranks at the top of the{" "}
+                  <a
+                    href="https://huggingface.co/spaces/mteb/leaderboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-500"
+                  >
+                    MTEB leaderboard
+                  </a>
+                  . The API key is free with 1,000 daily usage allowance for the embedding model. You can obtain your API key{" "}
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-500"
+                  >
+                    here
+                  </a>
+                  .
+                </p>
               </div>
             )}
 
@@ -896,11 +1009,26 @@ function UI({ loaderData }: Route.ComponentProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showMyWords} onOpenChange={setShowMyWords}>
+      <Dialog  open={showMyWords} onOpenChange={setShowMyWords}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>My Saved Word Lists</DialogTitle>
+          <DialogHeader >
+            <div className="flex justify-between items-center">
+              <DialogTitle>Saved Word Lists</DialogTitle>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-3 py-1 mr-2 bg-blue-600 text-white text-sm rounded-md "
+              >
+                Import List
+              </button>
+            </div>
           </DialogHeader>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={importWordList}
+            style={{ display: 'none' }}
+          />
 
           <div className="space-y-4">
             {(() => {
@@ -941,9 +1069,15 @@ function UI({ loaderData }: Route.ComponentProps) {
                     <div className="flex gap-2">
                       <button
                         onClick={() => loadSavedList(savedList)}
-                        className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                       >
                         Load
+                      </button>
+                      <button
+                        onClick={() => exportWordList(savedList)}
+                        className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                      >
+                        Export
                       </button>
                       <button
                         onClick={() => deleteSavedList(savedList.id)}
@@ -963,6 +1097,187 @@ function UI({ loaderData }: Route.ComponentProps) {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  ) : (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="max-w-2xl w-full mx-auto p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+              Welcome to Semantic Similarity Visualizer
+            </h1>
+            <p className="text-gray-600">
+              Please configure your API key to get started
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Embedding Service:
+              </label>
+              <select
+                value={tempSettings.selectedService}
+                onChange={(e) => 
+                  setTempSettings((prev) => ({
+                    ...prev,
+                    selectedService: e.target.value,
+                  }))
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="mistral">Mistral AI (mistral-embed)</option>
+                <option value="openai">OpenAI (text-embedding-3-large)</option>
+                <option value="voyage">Voyage AI (voyage-3-large)</option>
+                <option value="google">Google (gemini-embedding-001)</option>
+                <option value="huggingface">
+                  Hugging Face (Qwen/Qwen3-Embedding-8B)
+                </option>
+              </select>
+            </div>
+
+            {tempSettings.selectedService === "openai" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  OpenAI API key:
+                </label>
+                <input
+                  type="password"
+                  value={tempSettings.openaiKey}
+                  onChange={(e) =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      openaiKey: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Enter your OpenAI API key"
+                />
+              </div>
+            )}
+
+            {tempSettings.selectedService === "voyage" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Voyage API key:
+                </label>
+                <input
+                  type="password"
+                  value={tempSettings.voyageKey}
+                  onChange={(e) =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      voyageKey: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Enter your Voyage API key"
+                />
+              </div>
+            )}
+
+            {tempSettings.selectedService === "google" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Google API key:
+                </label>
+                <input
+                  type="password"
+                  value={tempSettings.googleKey}
+                  onChange={(e) =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      googleKey: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Enter your Google API key"
+                />
+                <p className="mt-2 text-sm text-gray-600">
+                  gemini-embedding-001 ranks at the top of the{" "}
+                  <a
+                    href="https://huggingface.co/spaces/mteb/leaderboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-500"
+                  >
+                    MTEB leaderboard
+                  </a>
+                  . Get a free API key{" "}
+                  <a
+                    href="https://aistudio.google.com/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-indigo-600 hover:text-indigo-500"
+                  >
+                    here
+                  </a>.
+                </p>
+              </div>
+            )}
+
+            {tempSettings.selectedService === "huggingface" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Hugging Face API key:
+                </label>
+                <input
+                  type="password"
+                  value={tempSettings.huggingFaceKey}
+                  onChange={(e) =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      huggingFaceKey: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Enter your Hugging Face API key"
+                />
+              </div>
+            )}
+
+            {tempSettings.selectedService === "mistral" && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mistral API key:
+                </label>
+                <input
+                  type="password"
+                  value={tempSettings.mistralKey}
+                  onChange={(e) =>
+                    setTempSettings((prev) => ({
+                      ...prev,
+                      mistralKey: e.target.value,
+                    }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Enter your Mistral API key"
+                />
+              </div>
+            )}
+
+            <div className="flex justify-center pt-4">
+              <button
+                onClick={() => {
+                  if (hasValidTempApiKey()) {
+                    // console.log(tempSettings)
+                    // console.log(settings)
+                    setSettings(tempSettings);
+                  }
+                }}
+                disabled={!hasValidTempApiKey()}
+                className={`px-6 py-2 rounded-md font-medium ${
+                  hasValidTempApiKey()
+                    ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                Get Started
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
