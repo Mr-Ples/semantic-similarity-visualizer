@@ -1121,12 +1121,12 @@ class ErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="max-w-md mx-auto text-center">
-            <div className="bg-red-50 border border-red-200 rounded-md p-6">
+            <div className="border rounded-md p-6">
               <div className="flex justify-center mb-4">
                 <svg
-                  className="h-12 w-12 text-red-400"
+                  className="h-12 w-12"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
@@ -1137,23 +1137,29 @@ class ErrorBoundary extends Component<
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-red-800 mb-2">
-                Something went wrong
+              <h3 className="text-lg font-medium mb-2">
+                Oops! Something is broken
               </h3>
-              <p className="text-sm text-red-700 mb-4">
-                An unexpected error occurred. Please try refreshing the page.
+              <p className="text-sm mb-4">
+                The lazy developer probably made a breaking change
+              </p>
+              <p className="text-sm font-bold mb-4">
+                Please clear cache below
+              </p>
+              <p className="text-sm mb-4">
+                You can also report any bugs here: <a className="text-blue-500" href="https://github.com/Mr-Ples/semantic-similarity-visualizer/issues" target="_blank" rel="noopener noreferrer">@https://github.com/Mr-Ples/semantic-similarity-visualizer/issues</a>
               </p>
               {this.state.error && (
-                <div className="bg-red-100 border border-red-300 rounded p-3 mb-4 text-left">
-                  <p className="text-xs text-red-800 font-mono break-all">
+                <div className="border rounded p-3 mb-4 text-left">
+                  <p className="text-xs font-mono break-all">
                     <strong>Error:</strong> {this.state.error.message}
                   </p>
                   {this.state.error.stack && (
                     <details className="mt-2">
-                      <summary className="text-xs text-red-700 cursor-pointer">
+                      <summary className="text-xs cursor-pointer">
                         Stack trace
                       </summary>
-                      <pre className="text-xs text-red-700 mt-1 whitespace-pre-wrap break-all">
+                      <pre className="text-xs mt-1 whitespace-pre-wrap break-all">
                         {this.state.error.stack}
                       </pre>
                     </details>
@@ -1163,7 +1169,7 @@ class ErrorBoundary extends Component<
               <div className="space-y-2">
                 <button
                   onClick={this.exportAllData}
-                  className="w-full bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 mb-2"
+                  className="w-full  cursor-pointer px-4 py-2 rounded-md text-sm font-medium border mb-2"
                 >
                   Export Word Lists
                 </button>
@@ -1171,7 +1177,7 @@ class ErrorBoundary extends Component<
                   onClick={() => {
                     window.location.reload()
                   }}
-                  className="w-full bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  className="w-full cursor-pointer px-4 py-2 rounded-md text-sm font-medium border"
                 >
                   Refresh Page
                 </button>
@@ -1191,7 +1197,7 @@ class ErrorBoundary extends Component<
                       window.location.reload()
                     }
                   }}
-                  className="w-full bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                  className="w-full  cursor-pointer px-4 py-2 rounded-md text-sm font-medium border"
                 >
                   Clear Cache
                 </button>
