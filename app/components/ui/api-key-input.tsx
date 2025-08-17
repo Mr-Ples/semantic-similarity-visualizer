@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
+import { useLocation } from "react-router"
 import { MODELS, Services, type Settings } from "~/lib/constants"
+import { cn } from "~/lib/utils"
 
 export function ApiKeyInputs({
   settings,
@@ -21,10 +23,15 @@ export function ApiKeyInputs({
     }
   }, [showSettings])
 
+  const location = useLocation()
   return (
     <div className="space-y-4">
       {/* Vertical Axis Toggle */}
-      <div className="border-b border-gray-200 pb-4">
+      <div
+        className={cn("border-b border-gray-200 pb-4", {
+          hidden: location.pathname === "/utils",
+        })}
+      >
         <label className="flex items-center space-x-3">
           <input
             type="checkbox"

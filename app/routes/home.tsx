@@ -429,6 +429,7 @@ function UI({
       const newWords = [...existingWords]
 
       // Generate embeddings for each selected model
+      let hasError = false
       for (const selectedModel of selectedModels) {
         const modelData = MODELS.find((m) => m.model === selectedModel)
         if (!modelData) {
@@ -441,6 +442,7 @@ function UI({
           setError(
             `No API key for ${modelData.label}. Please add it in settings.`
           )
+          hasError = true
           continue
         }
 
@@ -452,7 +454,9 @@ function UI({
           })
 
           if (!data?.embedding?.length) {
+            console.log(data)
             setError("Failed to get embedding")
+            hasError = true
             break
           }
 
@@ -463,15 +467,20 @@ function UI({
           }
           newWords.push(newWord)
         } catch (error) {
+          console.log(error)
           setError(String(error))
+          hasError = true
           break
         }
       }
 
       setWords(newWords)
-      setError(null)
+      if (!hasError) {
+        setError(null)
+      }
     } catch (error) {
-      setError("Failed to add word")
+      console.log(error)
+      setError(String(error))
       console.error("Error adding word:", error)
     } finally {
       setIsLoading(false)
@@ -484,6 +493,10 @@ function UI({
       setWordInput("")
     }
   }
+
+  useEffect(() => {
+    console.log(error)
+  }, [error])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
