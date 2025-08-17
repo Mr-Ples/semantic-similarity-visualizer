@@ -683,7 +683,8 @@ export function WordAxis({
                   toast.info("Please enter a word")
                   return
                 }
-                if (words?.some((w: any) => w.word === wordInput.trim())) {
+
+                if (words?.some((w: any) => w.word === wordInput.trim()) || poles?.some((p: any) => p.word === wordInput.trim())) {
                   toast.info("Word already exists")
                   return
                 }
