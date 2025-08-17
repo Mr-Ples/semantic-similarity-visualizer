@@ -18,6 +18,7 @@ import {
 import { WordAxis } from "~/components/ui/word-axis"
 import { ApiKeyInputs } from "~/components/ui/api-key-input"
 import { useLocalStorageValue, useMountEffect } from "@react-hookz/web"
+import { getWordEmbedding } from "~/lib/embeddings.client"
 import {
   EmbeddingModels,
   MODELS,
@@ -28,7 +29,7 @@ import {
   type Settings,
   type WordData,
 } from "~/lib/constants"
-import { EmbeddingAction } from "./api.embeddings.$action"
+
 import { useSearchParams } from "react-router"
 
 export function meta({}: Route.MetaArgs) {
@@ -56,6 +57,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       defaultValue: {
         selectedModels: [], // Default to Google model selected
         keys: {},
+        enableVerticalAxis: false,
       },
     }
   )
@@ -92,6 +94,8 @@ function UI({
       defaultValue: [
         { word: "evil", pole: Pole.LEFT, embeddings: {} },
         { word: "good", pole: Pole.RIGHT, embeddings: {} },
+        { word: "rational", pole: Pole.BOTTOM, embeddings: {} },
+        { word: "faith", pole: Pole.TOP, embeddings: {} },
       ],
     }
   )
@@ -101,13 +105,6 @@ function UI({
       defaultValue: [],
     }
   )
-
-  useEffect(() => {
-    console.log(words)
-  }, [words])
-  useEffect(() => {
-    console.log(poles)
-  }, [poles])
 
   const [wordInput, setWordInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -173,48 +170,35 @@ function UI({
     if (!key) {
       throw Error("No key for model: " + wordData.model)
     }
-    const formData = new FormData()
-    formData.append("word", wordData.word)
-    formData.append("model", wordData.model)
-    formData.append("key", key)
-    const response = await fetch(
-      `/api/embeddings/${EmbeddingAction.GET_EMBEDDING}`,
-      {
-        method: "POST",
-        body: formData,
-      }
-    )
-    const data = (await response.json()) as {
-      success?: boolean
-      data?: {
-        embedding: number[]
-        model: string
-      }
-      error?: string
-      input?: {
-        word: string
-        model: EmbeddingModels
-        key: string
-      }
-    }
-    if (!data?.data?.embedding?.length) {
-      setError(JSON.stringify(data))
-      return
-    }
 
-    setWords((prev) => {
-      return (
-        prev?.map((word) => {
-          if (word.word === wordData.word && word.model === wordData.model) {
-            return {
-              ...word,
-              embedding: data?.data?.embedding,
+    try {
+      const data = await getWordEmbedding({
+        word: wordData.word,
+        model: wordData.model,
+        key: key,
+      })
+
+      if (!data?.embedding?.length) {
+        setError("No embedding received")
+        return
+      }
+
+      setWords((prev) => {
+        return (
+          prev?.map((word) => {
+            if (word.word === wordData.word && word.model === wordData.model) {
+              return {
+                ...word,
+                embedding: data.embedding,
+              }
             }
-          }
-          return word
-        }) || []
-      )
-    })
+            return word
+          }) || []
+        )
+      })
+    } catch (error) {
+      setError(String(error))
+    }
   }
 
   const refetchWordEmbeddings = async (wordList: WordData[]) => {
@@ -273,58 +257,48 @@ function UI({
       // Use the first model for this service to make the API call
       const primaryModel = modelsForService[0]
 
-      const formData = new FormData()
-      formData.append("word", poleData.word)
-      formData.append("model", primaryModel)
-      formData.append("key", settings?.keys?.[service] || "")
-
-      const response = await fetch(
-        `/api/embeddings/${EmbeddingAction.GET_EMBEDDING}`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      )
-
-      const data = (await response.json()) as {
-        success?: boolean
-        data?: {
-          embedding: number[]
-          model: string
-        }
-        error?: string
-        input?: {
-          word: string
-          model: EmbeddingModels
-          key: string
-        }
-      }
-
-      if (!data?.data?.embedding?.length) {
-        setError(JSON.stringify(data))
+      const key = settings?.keys?.[service]
+      if (!key) {
+        setError(`No key for service: ${service}`)
         continue
       }
 
-      // Apply the same embedding to all models using this service
-      setPoles((prev) => {
-        return (
-          prev?.map((pole) => {
-            if (pole.word === poleData.word && pole.pole === poleData.pole) {
-              const updatedEmbeddings = { ...pole.embeddings }
-              // Set the embedding for all models from this service
-              modelsForService.forEach((model) => {
-                updatedEmbeddings[model] = data?.data?.embedding
-              })
+      try {
+        const data = await getWordEmbedding({
+          word: poleData.word,
+          model: primaryModel,
+          key: key,
+        })
 
-              return {
-                ...pole,
-                embeddings: updatedEmbeddings,
+        if (!data?.embedding?.length) {
+          setError("No embedding received")
+          continue
+        }
+
+        // Apply the same embedding to all models using this service
+        setPoles((prev) => {
+          return (
+            prev?.map((pole) => {
+              if (pole.word === poleData.word && pole.pole === poleData.pole) {
+                const updatedEmbeddings = { ...pole.embeddings }
+                // Set the embedding for all models from this service
+                modelsForService.forEach((model) => {
+                  updatedEmbeddings[model] = data.embedding
+                })
+
+                return {
+                  ...pole,
+                  embeddings: updatedEmbeddings,
+                }
               }
-            }
-            return pole
-          }) || []
-        )
-      })
+              return pole
+            }) || []
+          )
+        })
+      } catch (error) {
+        setError(String(error))
+        continue
+      }
     }
   }
 
@@ -418,7 +392,7 @@ function UI({
     console.log(
       poles?.map((pole) => ({
         ...pole,
-        embeddings: undefined,
+        embeddings: Object.keys(pole.embeddings),
       }))
     )
   }, [poles])
@@ -464,39 +438,28 @@ function UI({
           continue
         }
 
-        const formData = new FormData()
-        formData.append("word", trimmedWord)
-        formData.append("model", selectedModel)
-        formData.append("key", key)
+        try {
+          const data = await getWordEmbedding({
+            word: trimmedWord,
+            model: selectedModel as EmbeddingModels,
+            key: key,
+          })
 
-        const response = await fetch(
-          `/api/embeddings/${EmbeddingAction.GET_EMBEDDING}`,
-          {
-            method: "POST",
-            body: formData,
+          if (!data?.embedding?.length) {
+            setError("Failed to get embedding")
+            break
           }
-        )
 
-        const data = (await response.json()) as {
-          success?: boolean
-          data?: {
-            embedding: number[]
-            model: string
+          const newWord: WordData = {
+            word: trimmedWord,
+            embedding: data.embedding,
+            model: selectedModel as EmbeddingModels,
           }
-          error?: string
-        }
-
-        if (!data.success || !data.data?.embedding?.length) {
-          setError(data.error || "Failed to get embedding")
+          newWords.push(newWord)
+        } catch (error) {
+          setError(String(error))
           break
         }
-
-        const newWord: WordData = {
-          word: trimmedWord,
-          embedding: data.data.embedding,
-          model: selectedModel as EmbeddingModels,
-        }
-        newWords.push(newWord)
       }
 
       setWords(newWords)
@@ -527,13 +490,17 @@ function UI({
     setWords([])
   }
 
-  const removeWord = (wordToRemove: string) => {
-    console.log("removeWord", wordToRemove)
+  const removeWord = (wordToRemove: string, modelToRemove?: string) => {
+    console.log("removeWord", wordToRemove, modelToRemove)
     console.log("words", words)
-    // const newWords = words?.filter((w) => w.word !== wordToRemove) || []
-    // console.log("newWords", newWords)
     setWords((prev) => {
-      return prev?.filter((w) => w.word !== wordToRemove) || []
+      if (modelToRemove) {
+        // Remove only the specific word+model combination
+        return prev?.filter((w) => !(w.word === wordToRemove && w.model === modelToRemove)) || []
+      } else {
+        // Remove word from all models (backward compatibility)
+        return prev?.filter((w) => w.word !== wordToRemove) || []
+      }
     })
   }
 
@@ -572,6 +539,7 @@ function UI({
       words: words, // All words with their models and embeddings
       poles: poles, // All poles with their embeddings for all models
       selectedModels: settings.selectedModels, // Track which models were active
+      enableVerticalAxis: settings.enableVerticalAxis, // Track vertical axis setting
     }
     let newLists
     if (replaceId) {
@@ -592,7 +560,7 @@ function UI({
     if (savedList.words) {
       setWords(savedList.words)
     }
-    
+
     // Load poles with all their embeddings
     if (savedList.poles) {
       setPoles(savedList.poles)
@@ -603,15 +571,14 @@ function UI({
         { word: savedList.northPole, pole: Pole.RIGHT, embeddings: {} },
       ])
     }
-    
-    // Update selected models if available
-    if (savedList.selectedModels) {
-      setSettings(prev => ({
-        ...prev,
-        selectedModels: savedList.selectedModels
-      }))
-    }
-    
+
+    // Update settings if available
+    setSettings((prev) => ({
+      ...prev,
+      ...(savedList.selectedModels && { selectedModels: savedList.selectedModels }),
+      ...(savedList.enableVerticalAxis !== undefined && { enableVerticalAxis: savedList.enableVerticalAxis }),
+    }))
+
     setShowMyWords(false)
   }
 
@@ -631,11 +598,12 @@ function UI({
       words: words, // All words with their models and embeddings
       poles: poles, // All poles with their embeddings for all models
       selectedModels: settings.selectedModels, // Track which models were active
+      enableVerticalAxis: settings.enableVerticalAxis, // Track vertical axis setting
       // Backward compatibility fields
-      northPole: poles?.find(p => p.pole === Pole.RIGHT)?.word || "good",
-      southPole: poles?.find(p => p.pole === Pole.LEFT)?.word || "evil",
+      northPole: poles?.find((p) => p.pole === Pole.RIGHT)?.word || "good",
+      southPole: poles?.find((p) => p.pole === Pole.LEFT)?.word || "evil",
     }
-    
+
     const dataStr = JSON.stringify(currentList, null, 2)
     const dataBlob = new Blob([dataStr], { type: "application/json" })
     const url = URL.createObjectURL(dataBlob)
@@ -807,24 +775,24 @@ function UI({
         <div className="bg-white rounded-lg shadow-sm">
           <div
             ref={axisRef}
-            className="relative h-[80vh] overflow-y-auto overflow-x-hidden"
+            className="relative h-[85vh] overflow-y-auto overflow-x-hidden"
           >
             <WordAxis
               words={words || []}
               onRemoveWord={removeWord}
               poles={poles || []}
               settings={settings}
-              onEditNorthPole={async (value: string) => {
+              onEditPole={async (pole: Pole, value: string) => {
                 setIsLoading(true)
                 try {
                   // Update the pole and clear old embeddings
                   setPoles((prev) => {
                     return (
-                      prev?.map((pole) => {
-                        if (pole.pole === Pole.RIGHT) {
-                          return { ...pole, word: value, embeddings: {} }
+                      prev?.map((p) => {
+                        if (p.pole === pole) {
+                          return { ...p, word: value, embeddings: {} }
                         }
-                        return pole
+                        return p
                       }) || []
                     )
                   })
@@ -832,42 +800,13 @@ function UI({
                   // Fetch embeddings for the new pole word
                   const newPole = {
                     word: value,
-                    pole: Pole.RIGHT,
+                    pole: pole,
                     embeddings: {},
                   }
                   await fetchPoleEmbedding(newPole)
                 } catch (error) {
-                  setError("Failed to update north pole")
-                  console.error("Error updating north pole:", error)
-                } finally {
-                  setIsLoading(false)
-                }
-              }}
-              onEditSouthPole={async (value: string) => {
-                setIsLoading(true)
-                try {
-                  // Update the pole and clear old embeddings
-                  setPoles((prev) => {
-                    return (
-                      prev?.map((pole) => {
-                        if (pole.pole === Pole.LEFT) {
-                          return { ...pole, word: value, embeddings: {} }
-                        }
-                        return pole
-                      }) || []
-                    )
-                  })
-
-                  // Fetch embeddings for the new pole word
-                  const newPole = {
-                    word: value,
-                    pole: Pole.LEFT,
-                    embeddings: {},
-                  }
-                  await fetchPoleEmbedding(newPole)
-                } catch (error) {
-                  setError("Failed to update south pole")
-                  console.error("Error updating south pole:", error)
+                  setError(`Failed to update ${pole} pole`)
+                  console.error(`Error updating ${pole} pole:`, error)
                 } finally {
                   setIsLoading(false)
                 }
@@ -986,38 +925,65 @@ function UI({
                       <div className="flex flex-wrap gap-2 text-sm text-gray-600">
                         <span className="inline-flex items-center px-2 py-1 bg-gray-100 rounded-full">
                           {(() => {
-                            const uniqueWords = [...new Set(savedList.words.map((w: any) => w.word))]
+                            const uniqueWords = [
+                              ...new Set(
+                                savedList.words.map((w: any) => w.word)
+                              ),
+                            ]
                             return uniqueWords.length
-                          })()} words
+                          })()}{" "}
+                          words
                         </span>
                         <span className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-700 rounded-full">
-                          {savedList.poles ? 
-                            `${savedList.poles.find((p: any) => p.pole === "LEFT")?.word || savedList.southPole || "evil"} ↔ ${savedList.poles.find((p: any) => p.pole === "RIGHT")?.word || savedList.northPole || "good"}` :
-                            `${savedList.southPole || "evil"} ↔ ${savedList.northPole || "good"}`
+                          {savedList.poles ?
+                            `${savedList.poles.find((p: any) => p.pole === "LEFT")?.word || savedList.southPole || poles?.find((p) => p.pole === Pole.LEFT)?.word || "left"} ↔ ${savedList.poles.find((p: any) => p.pole === "RIGHT")?.word || savedList.northPole || poles?.find((p) => p.pole === Pole.RIGHT)?.word || "right"}`
+                          : `${savedList.southPole || poles?.find((p) => p.pole === Pole.LEFT)?.word || "left"} ↔ ${savedList.northPole || poles?.find((p) => p.pole === Pole.RIGHT)?.word || "right"}`
                           }
                         </span>
-                        {savedList.selectedModels ? (
+                        {(savedList.enableVerticalAxis || (savedList.poles && savedList.poles.some((p: any) => p.pole === "TOP" || p.pole === "BOTTOM"))) && (
+                          <span className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-700 rounded-full">
+                            {savedList.poles ?
+                              `${savedList.poles.find((p: any) => p.pole === "BOTTOM")?.word || poles?.find((p) => p.pole === Pole.BOTTOM)?.word || "bottom"} ↕ ${savedList.poles.find((p: any) => p.pole === "TOP")?.word || poles?.find((p) => p.pole === Pole.TOP)?.word || "top"}`
+                            : `${poles?.find((p) => p.pole === Pole.BOTTOM)?.word || "bottom"} ↕ ${poles?.find((p) => p.pole === Pole.TOP)?.word || "top"}`
+                            }
+                          </span>
+                        )}
+                        {savedList.selectedModels ?
                           savedList.selectedModels.map((model: string) => {
-                            const modelData = MODELS.find(m => m.model === model)
-                            const colorClass = modelData ? modelColors[modelData.service] : "bg-gray-50 text-gray-700 border-gray-200"
+                            const modelData = MODELS.find(
+                              (m) => m.model === model
+                            )
+                            const colorClass =
+                              modelData ?
+                                modelColors[modelData.service]
+                              : "bg-gray-50 text-gray-700 border-gray-200"
                             return (
-                              <span key={model} className={`inline-flex items-center px-2 py-1 rounded-full text-xs border ${colorClass}`}>
+                              <span
+                                key={model}
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs border ${colorClass}`}
+                              >
                                 {model}
                               </span>
                             )
                           })
-                        ) : (
-                          (() => {
+                        : (() => {
                             const model = savedList.words[0]?.model
-                            const modelData = MODELS.find(m => m.model === model)
-                            const colorClass = modelData ? modelColors[modelData.service] : "bg-gray-50 text-gray-700 border-gray-200"
+                            const modelData = MODELS.find(
+                              (m) => m.model === model
+                            )
+                            const colorClass =
+                              modelData ?
+                                modelColors[modelData.service]
+                              : "bg-gray-50 text-gray-700 border-gray-200"
                             return (
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs border ${colorClass}`}>
+                              <span
+                                className={`inline-flex items-center px-2 py-1 rounded-full text-xs border ${colorClass}`}
+                              >
                                 {model || "Unknown"}
                               </span>
                             )
                           })()
-                        )}
+                        }
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1044,7 +1010,9 @@ function UI({
                   <div className="text-sm text-gray-600">
                     <span className="font-medium">Words:</span>{" "}
                     {(() => {
-                      const uniqueWords = [...new Set(savedList.words.map((w: any) => w.word))]
+                      const uniqueWords = [
+                        ...new Set(savedList.words.map((w: any) => w.word)),
+                      ]
                       return uniqueWords.join(", ")
                     })()}
                   </div>
@@ -1143,11 +1111,17 @@ class ErrorBoundary extends Component<
               <p className="text-sm mb-4">
                 The lazy developer probably made a breaking change
               </p>
-              <p className="text-sm font-bold mb-4">
-                Please clear cache below
-              </p>
+              <p className="text-sm font-bold mb-4">Please clear cache below</p>
               <p className="text-sm mb-4">
-                You can also report any bugs here: <a className="text-blue-500" href="https://github.com/Mr-Ples/semantic-similarity-visualizer/issues" target="_blank" rel="noopener noreferrer">@https://github.com/Mr-Ples/semantic-similarity-visualizer/issues</a>
+                You can also report any bugs here:{" "}
+                <a
+                  className="text-blue-500"
+                  href="https://github.com/Mr-Ples/semantic-similarity-visualizer/issues"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @https://github.com/Mr-Ples/semantic-similarity-visualizer/issues
+                </a>
               </p>
               {this.state.error && (
                 <div className="border rounded p-3 mb-4 text-left">

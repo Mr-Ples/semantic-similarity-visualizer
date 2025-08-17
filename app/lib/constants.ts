@@ -58,6 +58,7 @@ export interface Settings {
   keys: {
     [key in Services]?: string
   }
+  enableVerticalAxis?: boolean
 }
 
 export enum Pole {
@@ -83,9 +84,9 @@ export interface WordData {
 }
 
 export const modelColors: Record<Services, string> = {
-  [Services.GOOGLE]: "bg-blue-50 text-blue-700 border-blue-200",
-  [Services.OPENAI]: "bg-green-50 text-green-700 border-green-200",
-  [Services.VOYAGE]: "bg-purple-50 text-purple-700 border-purple-200",
-  [Services.MISTRAL]: "bg-orange-50 text-orange-700 border-orange-200",
-  [Services.HUGGINGFACE]: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  [Services.GOOGLE]: "blue",
+  [Services.OPENAI]: "green",
+  [Services.VOYAGE]: "purple",
+  [Services.MISTRAL]: "orange",
+  [Services.HUGGINGFACE]: "yellow",
 }

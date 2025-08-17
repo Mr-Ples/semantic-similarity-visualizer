@@ -23,6 +23,29 @@ export function ApiKeyInputs({
 
   return (
     <div className="space-y-4">
+      {/* Vertical Axis Toggle */}
+      <div className="border-b border-gray-200 pb-4">
+        <label className="flex items-center space-x-3">
+          <input
+            type="checkbox"
+            checked={inputs.enableVerticalAxis || false}
+            onChange={(e) => {
+              setInputs((prev) => ({
+                ...prev,
+                enableVerticalAxis: e.target.checked,
+              }))
+            }}
+            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+          />
+          <span className="text-sm font-medium text-gray-700">
+            Enable Vertical Axis
+          </span>
+        </label>
+        <p className="text-xs text-gray-500 mt-1 ml-7">
+          Add a vertical axis to create a 2D visualization with both horizontal and vertical semantic dimensions
+        </p>
+      </div>
+
       {MODELS.map((model) => (
         <div key={model.key}>
           <label className="block text-sm font-medium text-gray-700 mb-1">

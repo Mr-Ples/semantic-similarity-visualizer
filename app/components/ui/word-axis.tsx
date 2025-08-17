@@ -41,8 +41,7 @@ export function WordAxis({
   settings,
 
   onRemoveWord,
-  onEditNorthPole,
-  onEditSouthPole,
+  onEditPole,
   wordInput,
   onWordInputChange,
   onAddWord,
@@ -62,9 +61,8 @@ export function WordAxis({
   words: WordData[]
   settings: Settings
 
-  onRemoveWord: (word: string) => void
-  onEditNorthPole: (value: string) => void
-  onEditSouthPole: (value: string) => void
+  onRemoveWord: (word: string, model?: string) => void
+  onEditPole: (pole: Pole, value: string) => void
   wordInput: string
   onWordInputChange: (value: string) => void
   onAddWord: () => void
@@ -81,9 +79,9 @@ export function WordAxis({
 
   poles: PoleWordData[]
 }) {
-  const [showPolePopup, setShowPolePopup] = useState<"left" | "right" | null>(
-    null
-  )
+  const [showPolePopup, setShowPolePopup] = useState<
+    "left" | "right" | "top" | "bottom" | null
+  >(null)
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState("")
@@ -107,17 +105,15 @@ export function WordAxis({
     }
 
     // Find what changed and call appropriate parent function
-    const leftPole = tempPoles.find((p) => p.pole === Pole.LEFT)
-    const rightPole = tempPoles.find((p) => p.pole === Pole.RIGHT)
-    const originalLeft = poles.find((p) => p.pole === Pole.LEFT)
-    const originalRight = poles.find((p) => p.pole === Pole.RIGHT)
+    const poleTypes = [Pole.LEFT, Pole.RIGHT, Pole.TOP, Pole.BOTTOM]
 
-    if (leftPole && leftPole.word !== originalLeft?.word) {
-      onEditSouthPole(leftPole.word)
-    }
+    for (const poleType of poleTypes) {
+      const tempPole = tempPoles.find((p) => p.pole === poleType)
+      const originalPole = poles.find((p) => p.pole === poleType)
 
-    if (rightPole && rightPole.word !== originalRight?.word) {
-      onEditNorthPole(rightPole.word)
+      if (tempPole && tempPole.word !== originalPole?.word) {
+        onEditPole(poleType, tempPole.word)
+      }
     }
 
     setShowPolePopup(null)
@@ -192,11 +188,25 @@ export function WordAxis({
       return []
     }
 
-    // Find pole data from the poles array
+    // Always use horizontal poles for primary axis
     const leftPoleData = poles.find((p) => p.pole === Pole.LEFT)
     const rightPoleData = poles.find((p) => p.pole === Pole.RIGHT)
 
+    // Get vertical poles if vertical axis is enabled
+    const topPoleData =
+      settings.enableVerticalAxis ?
+        poles.find((p) => p.pole === Pole.TOP)
+      : null
+    const bottomPoleData =
+      settings.enableVerticalAxis ?
+        poles.find((p) => p.pole === Pole.BOTTOM)
+      : null
+
     if (!leftPoleData || !rightPoleData) {
+      return []
+    }
+
+    if (settings.enableVerticalAxis && (!topPoleData || !bottomPoleData)) {
       return []
     }
 
@@ -216,6 +226,24 @@ export function WordAxis({
         rightEmbedding.length === 0
       ) {
         continue
+      }
+
+      // Get vertical embeddings if vertical axis is enabled
+      let topEmbedding = null
+      let bottomEmbedding = null
+
+      if (settings.enableVerticalAxis && topPoleData && bottomPoleData) {
+        topEmbedding = (topPoleData.embeddings as any)[selectedModel]
+        bottomEmbedding = (bottomPoleData.embeddings as any)[selectedModel]
+
+        if (
+          !topEmbedding ||
+          !bottomEmbedding ||
+          topEmbedding.length === 0 ||
+          bottomEmbedding.length === 0
+        ) {
+          continue
+        }
       }
 
       // Filter words to only include those from this specific model
@@ -242,47 +270,104 @@ export function WordAxis({
         model: selectedModel as EmbeddingModels,
       }
 
-      // Include poles in the calculation to get proper min/max range
-      const allWordsIncludingPoles = [
+      // Include horizontal poles in the calculation to get proper min/max range
+      const allWordsIncludingHorizontalPoles = [
         ...wordsForThisModel,
         leftPoleWordData,
         rightPoleWordData,
       ]
 
-      const allWordPositions = calculateAllWordPositions(
-        allWordsIncludingPoles,
+      const horizontalWordPositions = calculateAllWordPositions(
+        allWordsIncludingHorizontalPoles,
         leftEmbedding,
         rightEmbedding
       )
 
-      const allPositions = allWordPositions.map(
+      const horizontalPositions = horizontalWordPositions.map(
         (d) => d.northDistance / (d.southDistance + d.northDistance)
       )
-      const minPos = Math.min(...allPositions)
-      const maxPos = Math.max(...allPositions)
+      const horizontalMinPos = Math.min(...horizontalPositions)
+      const horizontalMaxPos = Math.max(...horizontalPositions)
 
       // Filter out the pole words for display (we only want regular words positioned)
-      const wordPositions = allWordPositions.filter(
+      const wordPositions = horizontalWordPositions.filter(
         (wp) =>
           wp.wordData.word !== leftPoleData.word &&
           wp.wordData.word !== rightPoleData.word
       )
 
+      // Calculate vertical positions for all words if vertical axis is enabled
+      let verticalWordPositions = []
+      let verticalMinPos = 0
+      let verticalMaxPos = 1
+
+      if (settings.enableVerticalAxis && topEmbedding && bottomEmbedding) {
+        // Create WordData objects for vertical poles
+        const topPoleWordData: WordData = {
+          word: topPoleData!.word,
+          embedding: topEmbedding,
+          model: selectedModel as EmbeddingModels,
+        }
+        const bottomPoleWordData: WordData = {
+          word: bottomPoleData!.word,
+          embedding: bottomEmbedding,
+          model: selectedModel as EmbeddingModels,
+        }
+
+        // Include vertical poles in the calculation to get proper min/max range
+        const allWordsIncludingVerticalPoles = [
+          ...wordsForThisModel,
+          topPoleWordData,
+          bottomPoleWordData,
+        ]
+
+        verticalWordPositions = calculateAllWordPositions(
+          allWordsIncludingVerticalPoles,
+          bottomEmbedding,
+          topEmbedding
+        )
+
+        const verticalPositions = verticalWordPositions.map(
+          (d) => d.northDistance / (d.southDistance + d.northDistance)
+        )
+        verticalMinPos = Math.min(...verticalPositions)
+        verticalMaxPos = Math.max(...verticalPositions)
+      }
+
       const modelWordPositions = wordPositions.map((wordPosition) => {
-        const rawPosition =
+        const horizontalRawPosition =
           wordPosition.northDistance /
           (wordPosition.southDistance + wordPosition.northDistance)
-        const normalizedPosition =
-          ((rawPosition - minPos) / (maxPos - minPos)) * 100
+        const horizontalNormalizedPosition =
+          ((horizontalRawPosition - horizontalMinPos) /
+            (horizontalMaxPos - horizontalMinPos)) *
+          100
 
-        // Debug logging
-        console.log(
-          `${wordPosition.wordData.word} (${selectedModel}): north=${wordPosition.northDistance.toFixed(3)}, south=${wordPosition.southDistance.toFixed(3)}, raw=${rawPosition.toFixed(3)}, norm=${normalizedPosition.toFixed(1)}`
-        )
+        let verticalNormalizedPosition = 50 // Default to center if no vertical axis
+
+        // Calculate vertical position if vertical axis is enabled
+        if (settings.enableVerticalAxis && verticalWordPositions.length > 0) {
+          // Find the corresponding vertical position for this word
+          const verticalPosition = verticalWordPositions.find(
+            (vp) => vp.wordData.word === wordPosition.wordData.word
+          )
+
+          if (verticalPosition) {
+            const verticalRawPosition =
+              verticalPosition.northDistance /
+              (verticalPosition.southDistance + verticalPosition.northDistance)
+            verticalNormalizedPosition =
+              100 -
+              ((verticalRawPosition - verticalMinPos) /
+                (verticalMaxPos - verticalMinPos)) *
+                100
+          }
+        }
 
         return {
           wordData: wordPosition.wordData,
-          position: normalizedPosition,
+          position: horizontalNormalizedPosition,
+          verticalPosition: verticalNormalizedPosition,
           verticalOffset: 0,
         }
       })
@@ -295,55 +380,107 @@ export function WordAxis({
     allModelPositions.sort((a, b) => a.position - b.position)
 
     // Group overlapping words and assign vertical positions
-    const overlapGroups = []
+    if (settings.enableVerticalAxis) {
+      // For vertical axis mode, use small offsets to separate overlapping words
+      const overlapGroups = []
 
-    for (let i = 0; i < allModelPositions.length; i++) {
-      const currentWord = allModelPositions[i]
-      let addedToGroup = false
+      for (let i = 0; i < allModelPositions.length; i++) {
+        const currentWord = allModelPositions[i]
+        let addedToGroup = false
 
-      // Try to add to existing group
-      for (const group of overlapGroups) {
-        const distance = Math.abs(currentWord.position - group[0].position)
-        if (distance < 10) {
-          group.push(currentWord)
-          addedToGroup = true
-          break
+        // Try to add to existing group based on both horizontal and vertical positions
+        for (const group of overlapGroups) {
+          const horizontalDistance = Math.abs(
+            currentWord.position - group[0].position
+          )
+          const verticalDistance = Math.abs(
+            (currentWord.verticalPosition || 50) -
+              (group[0].verticalPosition || 50)
+          )
+
+          // Words are considered overlapping if they're close in both dimensions
+          if (horizontalDistance < 10 && verticalDistance < 10) {
+            group.push(currentWord)
+            addedToGroup = true
+            break
+          }
+        }
+
+        // Create new group if not added to existing
+        if (!addedToGroup) {
+          overlapGroups.push([currentWord])
         }
       }
 
-      // Create new group if not added to existing
-      if (!addedToGroup) {
-        overlapGroups.push([currentWord])
+      // Assign small offsets to overlapping words so they don't completely overlap
+      for (const group of overlapGroups) {
+        if (group.length === 1) {
+          group[0].verticalOffset = 0
+        } else {
+          // Distribute overlapping words slightly
+          for (let i = 0; i < group.length; i++) {
+            if (i === 0) {
+              group[i].verticalOffset = 0 // Center
+            } else {
+              // Small random offset to separate overlapping words
+              group[i].verticalOffset =
+                (i % 2 === 1 ? -1 : 1) * (Math.floor(i / 2) + 1) * 15
+            }
+          }
+        }
       }
-    }
+    } else {
+      // For horizontal-only mode, use the original overlapping logic
+      const overlapGroups = []
 
-    // Assign vertical positions to each group
-    for (const group of overlapGroups) {
-      if (group.length === 1) {
-        group[0].verticalOffset = 0
-      } else {
-        // Distribute words in group around center
-        for (let i = 0; i < group.length; i++) {
-          if (i === 0) {
-            group[i].verticalOffset = 0 // Center
-          } else if (i === 1) {
-            group[i].verticalOffset = -40 // Above
-          } else if (i === 2) {
-            group[i].verticalOffset = 40 // Below
-          } else {
-            // Additional words alternate above and below
-            const offset =
-              i % 2 === 1 ?
-                -(Math.floor(i / 2) + 1) * 40
-              : (Math.floor(i / 2) + 1) * 40
-            group[i].verticalOffset = offset
+      for (let i = 0; i < allModelPositions.length; i++) {
+        const currentWord = allModelPositions[i]
+        let addedToGroup = false
+
+        // Try to add to existing group
+        for (const group of overlapGroups) {
+          const distance = Math.abs(currentWord.position - group[0].position)
+          if (distance < 15) {
+            group.push(currentWord)
+            addedToGroup = true
+            break
+          }
+        }
+
+        // Create new group if not added to existing
+        if (!addedToGroup) {
+          overlapGroups.push([currentWord])
+        }
+      }
+
+      // Assign vertical positions to each group
+      for (const group of overlapGroups) {
+        if (group.length === 1) {
+          group[0].verticalOffset = 0
+        } else {
+          // Distribute words in group around center with increased spacing
+          for (let i = 0; i < group.length; i++) {
+            if (i === 0) {
+              group[i].verticalOffset = 0 // Center
+            } else if (i === 1) {
+              group[i].verticalOffset = -40 // Above
+            } else if (i === 2) {
+              group[i].verticalOffset = 40 // Below
+            } else {
+              // Additional words alternate above and below with more spacing
+              const offset =
+                i % 2 === 1 ?
+                  -(Math.floor(i / 2) + 1) * 40
+                : (Math.floor(i / 2) + 1) * 25
+              group[i].verticalOffset = offset
+            }
           }
         }
       }
     }
 
     return allModelPositions
-  }, [words, poles])
+  }, [words, poles, settings.enableVerticalAxis, selectedModels])
 
   function PolePopup({
     isOpen,
@@ -413,7 +550,7 @@ export function WordAxis({
   }
 
   return (
-    <div className="bg-white h-full max-md:p-0 rounded-lg shadow-sm border border-gray-200 p-6">
+    <div className="bg-white h-full max-md:px-0 max-md:pt-[6rem] rounded-lg shadow-sm border border-gray-200 p-2 pt-10">
       {/* Loading spinner in top right */}
       {isLoading && (
         <div className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-white px-3 py-2 rounded-md shadow-md border border-gray-200">
@@ -425,7 +562,7 @@ export function WordAxis({
       )}
 
       {/* Small input in top right */}
-      <div className="absolute top-4 right-4 z-20">
+      <div className="absolute top-2 right-4 z-20">
         <div className="flex flex-wrap-reverse gap-2 items-center">
           {/* Selected model tags */}
           <div className="flex ml-auto flex-wrap justify-end gap-1 items-center">
@@ -478,13 +615,18 @@ export function WordAxis({
               const service = MODELS.find(
                 (modelData) => modelData.model === model
               )?.service
-              const color = service ? modelColors[service] : undefined
+              const color = modelColors[service]
+              const colorClass =
+                service ?
+                  `bg-${color}-50 border-${color}-200 text-${color}-700 ` ||
+                  "bg-gray-50 text-gray-700 border-gray-200"
+                : "bg-gray-50 text-gray-700 border-gray-200"
               return (
                 <button
                   key={model}
                   onMouseEnter={() => setHoveredModel(model)}
                   onMouseLeave={() => setHoveredModel(null)}
-                  className={`inline-flex cursor-pointer items-center px-2 py-1 text-xs font-medium rounded-full border transition-all hover:opacity-75 ${(service && modelColors[service]) || "bg-gray-50 text-gray-700 border-gray-200"}`}
+                  className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium rounded-full border transition-all hover:opacity-75 ${colorClass}`}
                 >
                   {model}
                   <button
@@ -526,11 +668,13 @@ export function WordAxis({
                   return
                 }
                 // Check if API keys exist for all selected models
-                const missingKeys = settings.selectedModels.filter(modelName => {
-                  const modelData = MODELS.find(m => m.model === modelName)
-                  if (!modelData) return true
-                  return !settings?.keys?.[modelData.service]
-                })
+                const missingKeys = settings.selectedModels.filter(
+                  (modelName) => {
+                    const modelData = MODELS.find((m) => m.model === modelName)
+                    if (!modelData) return true
+                    return !settings?.keys?.[modelData.service]
+                  }
+                )
                 if (missingKeys.length > 0) {
                   toast.info("Please add API keys for selected models")
                   return
@@ -657,7 +801,7 @@ export function WordAxis({
                   <p className="text-sm text-gray-600 mb-2">
                     Or replace existing list:
                   </p>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
+                  <div className="max-h-32 overflow-y-auto custom-scrollbar space-y-1">
                     {savedLists.map((list: any) => (
                       <button
                         key={list.id}
@@ -696,11 +840,17 @@ export function WordAxis({
         </DialogContent>
       </Dialog>
 
-      <div className="relative h-full pt-6 px-6 overflow-y-auto overflow-x-hidden">
-        {/* Main axis line */}
+      <div className="relative h-full overflow-y-auto custom-scrollbar overflow-x-hidden">
+        {/* Always show horizontal axis line */}
         <div className="absolute left-6 right-6 top-1/2 transform -translate-y-1/2 h-1 bg-gray-300 rounded-full"></div>
 
-        {/* South Pole Label */}
+        {/* Vertical axis line (only when enabled) */}
+        {settings.enableVerticalAxis && (
+          <div className="absolute left-1/2 top-6 bottom-6 transform -translate-x-1/2 w-1 bg-gray-300 rounded-full"></div>
+        )}
+
+        {/* Horizontal Poles - Always visible */}
+        {/* South Pole Label (Left) */}
         <div className="absolute left-0 top-1/2 transform -translate-y-1/2">
           <div
             onClick={() => setShowPolePopup("left")}
@@ -722,14 +872,14 @@ export function WordAxis({
               }
               onSave={handlePoleSave}
               onCancel={handlePoleCancel}
-              placeholder="Enter south pole word"
+              placeholder="Enter left pole word"
               focusColor="red"
               position="left"
             />
           )}
         </div>
 
-        {/* North Pole Label */}
+        {/* North Pole Label (Right) */}
         <div className="absolute right-0 top-1/2 transform -translate-y-1/2">
           <div
             onClick={() => setShowPolePopup("right")}
@@ -751,56 +901,170 @@ export function WordAxis({
               }
               onSave={handlePoleSave}
               onCancel={handlePoleCancel}
-              placeholder="Enter north pole word"
+              placeholder="Enter right pole word"
               focusColor="green"
               position="right"
             />
           )}
         </div>
 
-        {/* Words positioned along the axis */}
-        {positionedWords.map(({ wordData, position, verticalOffset }) => {
-          // Find the corresponding word to get model info
-          const wordInfo = words.find((w: any) => w.word === wordData.word)
-          const modelService = MODELS.find(
-            (m: any) => m.model === wordData.model
-          )?.service
+        {/* Vertical Poles - Only when vertical axis is enabled */}
+        {settings.enableVerticalAxis && (
+          <>
+            {/* Bottom Pole Label */}
+            <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2">
+              <div
+                onClick={() => setShowPolePopup("bottom")}
+                className="px-4 py-2 bg-orange-100 text-orange-800 rounded-md text-sm font-medium shadow-sm cursor-pointer hover:bg-orange-200 transition-colors"
+              >
+                {poles.find((p) => p.pole === Pole.BOTTOM)?.word || ""}
+              </div>
 
-          const wordModelColors: Record<string, string> = {
-            google: "bg-blue-100 text-blue-800 border-blue-300",
-            openai: "bg-green-100 text-green-800 border-green-300",
-            voyage: "bg-purple-100 text-purple-800 border-purple-300",
-            mistral: "bg-orange-100 text-orange-800 border-orange-300",
-            huggingface: "bg-yellow-100 text-yellow-800 border-yellow-300",
-          }
-
-          const colorClass =
-            (modelService && wordModelColors[modelService]) ||
-            "bg-gray-100 text-gray-800 border-gray-300"
-
-          // Determine opacity based on hover state
-          const isHovered = hoveredModel === wordData.model
-          const shouldReduceOpacity = hoveredModel && !isHovered
-          const opacityClass =
-            shouldReduceOpacity ? "opacity-40" : "opacity-100"
-
-          return (
-            <div
-              key={wordData.word + wordData.model}
-              onClick={(e) => {
-                e.stopPropagation()
-                onRemoveWord(wordData.word)
-              }}
-              className={`absolute px-2 max-md:text-[10px] text-xs py-1 rounded-md font-medium shadow-sm transform -translate-x-1/2 -translate-y-1/2 cursor-pointer duration-200 z-20 border ${colorClass} ${opacityClass} hover:opacity-75`}
-              style={{
-                left: `${6 + (position / 100) * 88}%`,
-                top: `calc(50% - 20px + ${verticalOffset}px)`,
-              }}
-            >
-              {wordData.word}
+              {showPolePopup === "bottom" && (
+                <PolePopup
+                  isOpen={true}
+                  value={
+                    tempPoles.find((p) => p.pole === Pole.BOTTOM)?.word || ""
+                  }
+                  onChange={(value) =>
+                    setTempPoles((prev) =>
+                      prev.map((p) =>
+                        p.pole === Pole.BOTTOM ? { ...p, word: value } : p
+                      )
+                    )
+                  }
+                  onSave={handlePoleSave}
+                  onCancel={handlePoleCancel}
+                  placeholder="Enter bottom pole word"
+                  focusColor="orange"
+                  position="bottom"
+                />
+              )}
             </div>
-          )
-        })}
+
+            {/* Top Pole Label */}
+            <div className="absolute left-1/2 top-0 transform -translate-x-1/2">
+              <div
+                onClick={() => setShowPolePopup("top")}
+                className="px-4 py-2 bg-blue-100 text-blue-800 rounded-md text-sm font-medium shadow-sm cursor-pointer hover:bg-blue-200 transition-colors"
+              >
+                {poles.find((p) => p.pole === Pole.TOP)?.word || ""}
+              </div>
+
+              {showPolePopup === "top" && (
+                <PolePopup
+                  isOpen={true}
+                  value={tempPoles.find((p) => p.pole === Pole.TOP)?.word || ""}
+                  onChange={(value) =>
+                    setTempPoles((prev) =>
+                      prev.map((p) =>
+                        p.pole === Pole.TOP ? { ...p, word: value } : p
+                      )
+                    )
+                  }
+                  onSave={handlePoleSave}
+                  onCancel={handlePoleCancel}
+                  placeholder="Enter top pole word"
+                  focusColor="blue"
+                  position="top"
+                />
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Words positioned along the axis */}
+        {positionedWords.map(
+          ({ wordData, position, verticalPosition, verticalOffset }) => {
+            // Find the corresponding word to get model info
+            const wordInfo = words.find((w: any) => w.word === wordData.word)
+            const modelService = MODELS.find(
+              (m: any) => m.model === wordData.model
+            )?.service
+            if (!modelService) return null
+            const color = modelColors[modelService]
+
+            // Determine opacity based on hover state
+            const isHovered = hoveredModel === wordData.model
+            const colorClass =
+              modelService ?
+                settings.enableVerticalAxis ?
+                  `text-${color}-700 `
+                : `bg-${color}-50 border-${color}-200 text-${color}-700 `
+              : "bg-gray-50 text-gray-700 border-gray-200"
+
+            const shouldReduceOpacity = hoveredModel && !isHovered
+            const opacityClass =
+              shouldReduceOpacity ? "opacity-40" : "opacity-100"
+
+            if (settings.enableVerticalAxis) {
+              // 2D positioning with points at intersections
+              const horizontalPos = position
+              const verticalPos = verticalPosition
+
+              return (
+                <div
+                  key={
+                    wordData.word + wordData.model + settings.enableVerticalAxis
+                  }
+                >
+                  {/* Point at the intersection */}
+                  <div
+                    className="absolute w-3 h-3 bg-gray-800 rounded-full transform -translate-x-1/2 -translate-y-1/2 z-10"
+                    style={{
+                      left: `${horizontalPos}%`,
+                      top: `${verticalPos}%`,
+                    }}
+                  >
+                    <div className="relative">
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onRemoveWord(wordData.word, wordData.model)
+                        }}
+                        className={`absolute px-1 max-md:text-[10px] text-xs py-0.5 rounded-md font-medium shadow-sm cursor-pointer duration-200 z-20 ${colorClass} ${opacityClass} hover:opacity-75`}
+                        style={
+                          settings.enableVerticalAxis ?
+                            {
+                              left: 10,
+                              top: 5,
+                            }
+                          : {
+                              left: `calc(${horizontalPos}% + 10px + ${verticalOffset}px)`,
+                              top: `calc(${verticalPos}% - 10px)`,
+                              transform: "none",
+                            }
+                        }
+                      >
+                        {wordData.word}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Word label next to the point */}
+                </div>
+              )
+            } else {
+              // Original horizontal-only positioning with vertical offsets for overlaps
+              return (
+                <div
+                  key={wordData.word + wordData.model}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemoveWord(wordData.word, wordData.model)
+                  }}
+                  className={`absolute px-2 max-md:text-[10px] text-xs py-1 rounded-md font-medium shadow-sm transform -translate-x-1/2 -translate-y-1/2 cursor-pointer duration-200 z-20 border ${colorClass} ${opacityClass} hover:opacity-75`}
+                  style={{
+                    left: `${position}%`,
+                    top: `calc(50% - 20px + ${verticalOffset}px)`,
+                  }}
+                >
+                  {wordData.word}
+                </div>
+              )
+            }
+          }
+        )}
       </div>
 
       {/* Model Removal Confirmation Dialog */}
