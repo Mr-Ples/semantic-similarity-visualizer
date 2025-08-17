@@ -320,80 +320,85 @@ function UI({
     await Promise.all(promises)
   }
 
-  const fetchEmbeddingsForNewModel = async (model: string) => {
-    try {
-      setIsLoading(true)
 
-      // Get unique pole words that don't have embeddings for this model
-      const uniquePoleWords =
-        poles?.reduce((acc, pole) => {
-          if (!pole.embeddings?.[model]?.length) {
-            const existingPole = acc.find((p) => p.word === pole.word)
-            if (!existingPole) {
-              acc.push(pole)
-            }
-          }
-          return acc
-        }, [] as PoleWordData[]) || []
 
-      // Get all unique words and create new WordData entries for the new model
-      const uniqueWordTexts =
-        words?.reduce((acc, word) => {
-          if (!acc.includes(word.word)) {
-            acc.push(word.word)
-          }
-          return acc
-        }, [] as string[]) || []
-
-      // Create new WordData entries for the new model
-      const newWordsForModel = uniqueWordTexts.map((wordText) => ({
-        word: wordText,
-        model: model as EmbeddingModels,
-        embedding: undefined,
-      }))
-
-      // Add the new word entries to the words array
-      setWords((prevWords) => {
-        const existingWords = prevWords || []
-        const wordsToAdd = newWordsForModel.filter(
-          (newWord) =>
-            !existingWords.some(
-              (existing) =>
-                existing.word === newWord.word &&
-                existing.model === newWord.model
-            )
-        )
-        return [...existingWords, ...wordsToAdd]
-      })
-
-      const promises = []
-
-      // Fetch pole embeddings
-      if (uniquePoleWords.length > 0) {
-        promises.push(refetchPoleEmbeddings(uniquePoleWords))
-      }
-
-      // Fetch word embeddings for the new model entries
-      if (newWordsForModel.length > 0) {
-        promises.push(refetchWordEmbeddings(newWordsForModel))
-      }
-
-      if (promises.length > 0) {
-        await Promise.all(promises)
-      }
-    } catch (error) {
-      console.error("Error fetching embeddings for new model:", error)
-      setError(`Failed to fetch embeddings for ${model}`)
-    } finally {
-      setIsLoading(false)
+  // Handle changes to selected models - automatically add missing words and refetch embeddings
+  useEffect(() => {
+    if (!settings?.selectedModels?.length) {
+      return
     }
-  }
+
+    const promises = []
+
+    // Handle missing word embeddings
+    if (words?.length) {
+      const existingWords = words || []
+      const uniqueWordTexts = [...new Set(existingWords.map((word) => word.word))]
+      
+      // Find missing word+model combinations
+      const missingWordModels: { word: string; model: EmbeddingModels }[] = []
+      
+      for (const wordText of uniqueWordTexts) {
+        for (const selectedModel of settings.selectedModels) {
+          const exists = existingWords.some(
+            (existing) => existing.word === wordText && existing.model === selectedModel
+          )
+          if (!exists) {
+            missingWordModels.push({
+              word: wordText,
+              model: selectedModel as EmbeddingModels,
+            })
+          }
+        }
+      }
+
+      if (missingWordModels.length > 0) {
+        // Add missing word entries
+        const newWordEntries = missingWordModels.map((item) => ({
+          word: item.word,
+          model: item.model,
+          embedding: undefined,
+        }))
+
+        setWords((prevWords) => [...(prevWords || []), ...newWordEntries])
+        promises.push(refetchWordEmbeddings(newWordEntries as WordData[]))
+      }
+    }
+
+    // Handle missing pole embeddings
+    if (poles?.length) {
+      const polesNeedingEmbeddings = poles.filter((pole) =>
+        settings.selectedModels.some((model) => !(pole.embeddings && pole.embeddings[model as EmbeddingModels]?.length))
+      )
+
+      if (polesNeedingEmbeddings.length > 0) {
+        promises.push(refetchPoleEmbeddings(polesNeedingEmbeddings))
+      }
+    }
+
+    // Execute all promises if there are any
+    if (promises.length > 0) {
+      const refetchMissingEmbeddings = async () => {
+        setIsLoading(true)
+        try {
+          await Promise.all(promises)
+        } catch (error) {
+          console.error("Error fetching embeddings for new models:", error)
+          setError("Failed to fetch embeddings for new models")
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      refetchMissingEmbeddings()
+    }
+  }, [settings?.selectedModels])
 
   useEffect(() => {
     console.log(
       poles?.map((pole) => ({
         ...pole,
-        embeddings: Object.keys(pole.embeddings),
+        embeddings: Object.keys(pole.embeddings || {}),
       }))
     )
   }, [poles])
@@ -826,7 +831,6 @@ function UI({
               }}
               onClearWordsForModel={clearWordsForModel}
               onClearPolesForModel={clearPolesForModel}
-              fetchEmbeddingsForNewModel={fetchEmbeddingsForNewModel}
             />
           </div>
         </div>

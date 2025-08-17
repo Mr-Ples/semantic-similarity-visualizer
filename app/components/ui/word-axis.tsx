@@ -55,7 +55,6 @@ export function WordAxis({
   onShowSettings,
   onClearWordsForModel,
   onClearPolesForModel,
-  fetchEmbeddingsForNewModel,
 
   poles,
 }: {
@@ -76,7 +75,6 @@ export function WordAxis({
   onShowSettings: () => void
   onClearWordsForModel: (model: string) => void
   onClearPolesForModel: (model: string) => void
-  fetchEmbeddingsForNewModel: (model: string) => Promise<void>
 
   poles: PoleWordData[]
 }) {
@@ -588,16 +586,13 @@ export function WordAxis({
                         className="text-gray-500 hover:text-gray-700 text-sm"
                         key={service}
                         disabled={selectedModels.includes(model)}
-                        onClick={async () => {
+                        onClick={() => {
                           setSettings((prev: Settings) => {
                             return {
                               ...prev,
                               selectedModels: [...prev.selectedModels, model],
                             }
                           })
-
-                          // Fetch embeddings for pole words and regular words for the new model
-                          await fetchEmbeddingsForNewModel(model)
                         }}
                       >
                         {model}
