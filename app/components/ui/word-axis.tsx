@@ -621,12 +621,13 @@ export function WordAxis({
                   `bg-${color}-50 border-${color}-200 text-${color}-700 ` ||
                   "bg-gray-50 text-gray-700 border-gray-200"
                 : "bg-gray-50 text-gray-700 border-gray-200"
-              return (
+
+                return (
                 <button
-                  key={model}
+                  key={model + color}
                   onMouseEnter={() => setHoveredModel(model)}
                   onMouseLeave={() => setHoveredModel(null)}
-                  className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium rounded-full border transition-all hover:opacity-75 ${colorClass}`}
+                  className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium rounded-full border transition-all hover:opacity-75  ${colorClass}`}
                 >
                   {model}
                   <button
@@ -1005,7 +1006,7 @@ export function WordAxis({
               return (
                 <div
                   key={
-                    wordData.word + wordData.model + settings.enableVerticalAxis
+                    wordData.word + wordData.model + settings.enableVerticalAxis + color
                   }
                 >
                   {/* Point at the intersection */}
