@@ -93,7 +93,7 @@ export function ApiKeyInputs({
             </p>
           )}
           {model.service === Services.MISTRAL && (
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-gray-600 ">
               Get a free Mistral API key{" "}
               <a
                 href="https://console.mistral.ai/api-keys"
