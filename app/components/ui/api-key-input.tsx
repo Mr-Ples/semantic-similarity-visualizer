@@ -42,7 +42,8 @@ export function ApiKeyInputs({
           </span>
         </label>
         <p className="text-xs text-gray-500 mt-1 ml-7">
-          Add a vertical axis to create a 2D visualization with both horizontal and vertical semantic dimensions
+          Add a vertical axis to create a 2D visualization with both horizontal
+          and vertical semantic dimensions
         </p>
       </div>
 
@@ -82,6 +83,20 @@ export function ApiKeyInputs({
               . Get a free API key{" "}
               <a
                 href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 hover:text-indigo-500"
+              >
+                here
+              </a>
+              .
+            </p>
+          )}
+          {model.service === Services.MISTRAL && (
+            <p className="mt-2 text-sm text-gray-600">
+              Get a free Mistral API key{" "}
+              <a
+                href="https://console.mistral.ai/api-keys"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-indigo-600 hover:text-indigo-500"
