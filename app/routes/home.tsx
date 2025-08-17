@@ -25,6 +25,7 @@ import {
   Pole,
   Services,
   modelColors,
+  modelColorClasses,
   type PoleWordData,
   type Settings,
   type WordData,
@@ -953,9 +954,10 @@ function UI({
                             const modelData = MODELS.find(
                               (m) => m.model === model
                             )
+                            const colorClasses = modelData ? modelColorClasses[modelData.service] : null
                             const colorClass =
-                              modelData ?
-                                modelColors[modelData.service]
+                              modelData && colorClasses ?
+                                `${colorClasses.background} ${colorClasses.border} ${colorClasses.text}`
                               : "bg-gray-50 text-gray-700 border-gray-200"
                             return (
                               <span
@@ -971,9 +973,10 @@ function UI({
                             const modelData = MODELS.find(
                               (m) => m.model === model
                             )
+                            const colorClasses = modelData ? modelColorClasses[modelData.service] : null
                             const colorClass =
-                              modelData ?
-                                modelColors[modelData.service]
+                              modelData && colorClasses ?
+                                `${colorClasses.background} ${colorClasses.border} ${colorClasses.text}`
                               : "bg-gray-50 text-gray-700 border-gray-200"
                             return (
                               <span

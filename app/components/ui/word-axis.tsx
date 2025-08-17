@@ -16,6 +16,7 @@ import {
 import {
   EmbeddingModels,
   modelColors,
+  modelColorClasses,
   MODELS,
   Pole,
   type PoleWordData,
@@ -615,16 +616,15 @@ export function WordAxis({
               const service = MODELS.find(
                 (modelData) => modelData.model === model
               )?.service
-              const color = modelColors[service]
+              const colorClasses = service ? modelColorClasses[service] : null
               const colorClass =
-                service ?
-                  `bg-${color}-50 border-${color}-200 text-${color}-700 ` ||
-                  "bg-gray-50 text-gray-700 border-gray-200"
+                service && colorClasses ?
+                  `${colorClasses.background} ${colorClasses.border} ${colorClasses.text}`
                 : "bg-gray-50 text-gray-700 border-gray-200"
 
                 return (
                 <button
-                  key={model + color}
+                  key={model + service}
                   onMouseEnter={() => setHoveredModel(model)}
                   onMouseLeave={() => setHoveredModel(null)}
                   className={`inline-flex cursor-pointer items-center px-2 py-0.5 text-xs font-medium rounded-full border transition-all hover:opacity-75  ${colorClass}`}
@@ -983,18 +983,18 @@ export function WordAxis({
               (m: any) => m.model === wordData.model
             )?.service
             if (!modelService) return null
-            const color = modelColors[modelService]
+            const colorClasses = modelColorClasses[modelService]
 
             // Determine opacity based on hover state
             const isHovered = hoveredModel === wordData.model
             const colorClass =
-              modelService ?
+              modelService && colorClasses ?
                 settings.enableVerticalAxis ?
-                  `text-${color}-700 `
-                : `bg-${color}-50 border-${color}-200 text-${color}-700 `
+                  colorClasses.textOnly
+                : `${colorClasses.background} ${colorClasses.border} ${colorClasses.text}`
               : "bg-gray-50 text-gray-700 border-gray-200"
 
-            const shouldReduceOpacity = hoveredModel && !isHovered
+              const shouldReduceOpacity = hoveredModel && !isHovered
             const opacityClass =
               shouldReduceOpacity ? "opacity-40" : "opacity-100"
 
@@ -1006,7 +1006,7 @@ export function WordAxis({
               return (
                 <div
                   key={
-                    wordData.word + wordData.model + settings.enableVerticalAxis + color
+                    wordData.word + wordData.model + settings.enableVerticalAxis + modelService
                   }
                 >
                   {/* Point at the intersection */}

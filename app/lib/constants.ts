@@ -90,3 +90,36 @@ export const modelColors: Record<Services, string> = {
   [Services.MISTRAL]: "orange",
   [Services.HUGGINGFACE]: "yellow",
 }
+
+export const modelColorClasses: Record<Services, { background: string; border: string; text: string; textOnly: string }> = {
+  [Services.GOOGLE]: {
+    background: "bg-blue-50",
+    border: "border-blue-200", 
+    text: "text-blue-700",
+    textOnly: "text-blue-700"
+  },
+  [Services.OPENAI]: {
+    background: "bg-green-50",
+    border: "border-green-200",
+    text: "text-green-700", 
+    textOnly: "text-green-700"
+  },
+  [Services.VOYAGE]: {
+    background: "bg-purple-50",
+    border: "border-purple-200",
+    text: "text-purple-700",
+    textOnly: "text-purple-700"
+  },
+  [Services.MISTRAL]: {
+    background: "bg-orange-50",
+    border: "border-orange-200",
+    text: "text-orange-700",
+    textOnly: "text-orange-700"
+  },
+  [Services.HUGGINGFACE]: {
+    background: "bg-yellow-50",
+    border: "border-yellow-200",
+    text: "text-yellow-700",
+    textOnly: "text-yellow-700"
+  },
+}
